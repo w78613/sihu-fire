@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 功能修復版</title>
+    <title>四湖分隊雲端預定表 - 快速點選版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -42,7 +42,7 @@
         .col-date-fixed { position: sticky; left: 0; z-index: 91; width: 45px; background: white; border-right: 1px solid #333; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; width: 45px; background: white; border-right: 2px solid #333 !important; }
         
-        .col-staff { width: 85px; font-weight: bold; }
+        .col-staff { width: 85px; font-weight: bold; cursor: pointer; }
         .col-note { width: 130px; border-right: 2px solid #333; }
         .col-stat { width: 85px; font-weight: bold; }
         .stat-header { background: #bfbfbf !important; color: black !important; }
@@ -52,12 +52,17 @@
         .status-monthly { background-color: var(--color-monthly) !important; }
         .status-official { background-color: var(--color-official) !important; }
 
-        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; }
+        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; }
         .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
         .order-row { background: #f1f8e9; font-weight: bold; border-top: 2px solid #333; }
         .warning-text { color: red; font-size: 11px; }
 
-        /* 名單彈窗樣式 */
+        /* 快速選單樣式 */
+        #quickMenu { display: none; position: fixed; background: white; border: 2px solid #333; z-index: 3000; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); overflow: hidden; }
+        .menu-item { padding: 10px 15px; border-bottom: 1px solid #eee; cursor: pointer; text-align: center; font-weight: bold; transition: 0.2s; }
+        .menu-item:hover { background: #f0f0f0; }
+        .menu-item.clear { color: red; border-bottom: none; }
+
         #staffModal { display: none; position: fixed; top: 15%; left: 50%; transform: translateX(-50%); width: 85%; max-width: 600px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         #staffInputs { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 15px; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
@@ -76,45 +81,72 @@
     <table id="dutyTable"></table>
 </div>
 
-<div class="modal-overlay" id="modalOverlay" onclick="toggleStaffModal()"></div>
+<div id="quickMenu">
+    <div class="menu-item" onclick="setQuickVal('休假1')">休假1</div>
+    <div class="menu-item" onclick="setQuickVal('休假2')">休假2</div>
+    <div class="menu-item" onclick="setQuickVal('換休1')">換休1</div>
+    <div class="menu-item" onclick="setQuickVal('換休2')">換休2</div>
+    <div class="menu-item" onclick="setQuickVal('月補')">月補</div>
+    <div class="menu-item" onclick="setQuickVal('公假A1')">公假A1</div>
+    <div class="menu-item clear" onclick="setQuickVal('')">❌ 清除內容</div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeAllModals()"></div>
 <div id="staffModal">
-    <h3 style="margin-top:0;">👥 隊員名單設定 (1-18)</h3>
+    <h3 style="margin-top:0;">👥 隊員名單設定</h3>
     <div id="staffInputs"></div>
-    <button class="btn" style="background: #0984e3; width: 100%;" onclick="saveStaffNames()">✅ 儲存名單設定</button>
-    <button class="btn" style="background: #b2bec3; width: 100%; margin-top: 5px;" onclick="toggleStaffModal()">取消關閉</button>
+    <button class="btn" style="background: #0984e3; width: 100%;" onclick="saveStaffNames()">✅ 儲存</button>
 </div>
 
 <script>
 let staffNames = [];
 let isStatsVisible = false;
+let currentActiveCell = null;
+
+function closeAllModals() {
+    document.getElementById('staffModal').style.display = 'none';
+    document.getElementById('modalOverlay').style.display = 'none';
+    document.getElementById('quickMenu').style.display = 'none';
+}
+
+function showQuickMenu(e, cell) {
+    e.preventDefault();
+    currentActiveCell = cell;
+    const menu = document.getElementById('quickMenu');
+    menu.style.display = 'block';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = (e.clientY + 10) + 'px';
+    document.getElementById('modalOverlay').style.display = 'block';
+}
+
+function setQuickVal(val) {
+    if (currentActiveCell) {
+        currentActiveCell.innerText = val;
+        const day = currentActiveCell.closest('tr').dataset.day;
+        saveRowData(day);
+    }
+    closeAllModals();
+}
 
 function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
 
-// 名單彈窗控制
 function toggleStaffModal() {
     const modal = document.getElementById('staffModal');
     const overlay = document.getElementById('modalOverlay');
-    if (modal.style.display === 'block') {
-        modal.style.display = 'none';
-        overlay.style.display = 'none';
-    } else {
-        const container = document.getElementById('staffInputs');
-        container.innerHTML = Array.from({length:18}).map((_, i) => 
-            `<div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:75%;"></div>`
-        ).join('');
-        modal.style.display = 'block';
-        overlay.style.display = 'block';
-    }
+    const container = document.getElementById('staffInputs');
+    container.innerHTML = Array.from({length:18}).map((_, i) => 
+        `<div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:75%;"></div>`
+    ).join('');
+    modal.style.display = 'block';
+    overlay.style.display = 'block';
 }
 
 function saveStaffNames() {
     const newNames = [];
-    for (let i = 0; i < 18; i++) {
-        newNames.push(document.getElementById(`staffInput${i}`).value.trim());
-    }
+    for (let i = 0; i < 18; i++) newNames.push(document.getElementById(`staffInput${i}`).value.trim());
     db.ref(`duty_system/global/staffNames`).set(newNames).then(() => {
-        alert("名單已成功同步至雲端！");
-        toggleStaffModal();
+        closeAllModals();
+        initTable();
     });
 }
 
@@ -122,7 +154,6 @@ function initTable() {
     const pickerVal = document.getElementById('monthPicker').value;
     if(!pickerVal) return;
     const [year, month] = pickerVal.split('-');
-    
     db.ref(`duty_system/global/staffNames`).on('value', (snap) => {
         staffNames = snap.val() || [];
         db.ref(`duty_system/${year}_${month}`).on('value', (snapshot) => {
@@ -169,7 +200,7 @@ function renderTable(year, month, data) {
         staffNames.forEach((name, i) => {
             if(name) {
                 const val = rowData['s'+i] || '';
-                html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" onblur="saveRowData(${d})">${val}</div></td>`;
+                html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" onclick="showQuickMenu(event, this)" onblur="saveRowData(${d})">${val}</div></td>`;
             }
         });
 
@@ -183,13 +214,11 @@ function renderTable(year, month, data) {
         html += `</tr>`;
     }
 
-    // 填假順序
     html += `<tr class="order-row"><td colspan="2">填假順序</td>`;
     staffNames.forEach((name, i) => {
         if(name) html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`;
     });
     html += `<td colspan="${isStatsVisible ? 5 : 2}"></td></tr></tbody>`;
-    
     document.getElementById('dutyTable').innerHTML = html;
 }
 
