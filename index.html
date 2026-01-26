@@ -26,76 +26,63 @@
 
     <style>
         :root {
-            --header-blue: #2c3e50;
+            --header-dark: #2c3e50;
             --sunday-red: #ff7675;
             --saturday-orange: #fab1a0;
-            /* 指定顏色 */
-            --color-holiday: #d4edda;  /* 休假1,2: 綠色 */
-            --color-exchange: #fff3cd; /* 換休1,2: 黃橘色 */
-            --color-monthly: #c1e1f5;  /* 月補: 水藍色 */
-            --color-official: #f8d7da; /* 公假A1: 粉紅色 */
+            --color-holiday: #d4edda;  /* 綠色 */
+            --color-exchange: #fff3cd; /* 橘黃色 */
+            --color-monthly: #c1e1f5;  /* 水藍色 */
+            --color-official: #f8d7da; /* 粉紅色 */
         }
-        body { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; margin: 0; background: #ecf0f1; color: #2c3e50; }
-        .top-bar { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 15px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 1000; flex-wrap: wrap; }
+        body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; background: #f8f9fa; }
+        .top-bar { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 10px; background: white; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 1000; }
         
-        .table-container { overflow: auto; max-height: 85vh; padding: 10px; box-sizing: border-box; }
-        table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; table-layout: fixed; width: max-content; }
-        th, td { border: 1px solid #bdc3c7; text-align: center; font-size: 13px; height: 40px; position: relative; }
+        .table-container { overflow: auto; max-height: 88vh; padding: 10px; }
+        table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; }
+        th, td { border: 1px solid #ccc; text-align: center; font-size: 13px; height: 38px; min-width: 60px; box-sizing: border-box; }
         
-        /* 標題與凍結 */
-        thead th { position: sticky; top: 0; z-index: 100; background: var(--header-blue); color: white; height: 50px; }
+        thead th { position: sticky; top: 0; z-index: 100; background: var(--header-dark); color: white; }
         .col-date-fixed { position: sticky; left: 0; z-index: 91; width: 45px; background: white; border-right: 1px solid #333; }
-        .col-week-fixed { position: sticky; left: 45px; z-index: 91; width: 45px; background: white; border-right: 3px solid #333 !important; }
-        thead th.col-date-fixed, thead th.col-week-fixed { z-index: 110; background: var(--header-blue); }
+        .col-week-fixed { position: sticky; left: 45px; z-index: 91; width: 45px; background: white; border-right: 2px solid #333 !important; }
+        thead th.col-date-fixed, thead th.col-week-fixed { z-index: 110; background: var(--header-dark); }
 
-        .col-staff { width: 80px; min-width: 80px; }
+        .col-staff { width: 75px; font-weight: bold; }
         .col-note { width: 120px; border-right: 2px solid #333; }
-        .col-stat { width: 70px; font-weight: bold; background: #f9f9f9; }
+        .col-stat { width: 70px; background: #fdfdfd; font-weight: bold; }
 
-        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; font-weight: bold; cursor: cell; }
+        /* 顏色類別 */
+        .status-holiday { background-color: var(--color-holiday) !important; }
+        .status-exchange { background-color: var(--color-exchange) !important; }
+        .status-monthly { background-color: var(--color-monthly) !important; }
+        .status-official { background-color: var(--color-official) !important; }
 
-        /* 顏色聯動 */
-        .status-holiday { background-color: var(--color-holiday) !important; color: #155724; }
-        .status-exchange { background-color: var(--color-exchange) !important; color: #856404; }
-        .status-monthly { background-color: var(--color-monthly) !important; color: #0c5460; }
-        .status-official { background-color: var(--color-official) !important; color: #721c24; }
-
-        /* 快選選單美化 */
-        .quick-menu { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; grid-template-columns: repeat(2, 1fr); background: white; border: 1px solid #3498db; }
+        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; }
+        .quick-menu { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; grid-template-columns: 1fr 1fr; background: white; }
         .cell:focus-within .quick-menu { display: grid; }
-        .quick-btn { font-size: 10px; border: 0.1px solid #eee; background: white; cursor: pointer; padding: 0; font-weight: bold; }
-        .quick-btn:hover { background: #3498db; color: white; }
+        .quick-btn { font-size: 10px; border: 0.1px solid #eee; cursor: pointer; background: white; font-weight: bold; }
 
-        .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .btn-green { background: #27ae60; color: white; }
-        .btn-blue { background: #3498db; color: white; }
-        .btn-grey { background: #95a5a6; color: white; }
-        .btn:hover { opacity: 0.8; transform: translateY(-1px); }
-
-        .warning-text { color: #e74c3c; font-size: 11px; }
+        .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
+        .warning-text { color: red; font-size: 11px; }
     </style>
 </head>
 <body>
 
 <div class="top-bar">
-    <input type="month" id="monthPicker" style="padding: 5px;" onchange="initTable()">
-    <button class="btn btn-grey" onclick="toggleStaffModal()">👥 名單</button>
-    <button class="btn btn-green" id="toggleStatsBtn" onclick="toggleStatsVisibility()">📊 計算欄位</button>
-    <button class="btn btn-blue" onclick="exportToExcel()">📥 匯出 Excel</button>
-    <span style="font-size: 12px; color: #7f8c8d;">(支援 Ctrl+V 貼上 Excel 資料)</span>
+    <input type="month" id="monthPicker" onchange="initTable()">
+    <button class="btn" style="background: #636e72;" onclick="toggleStaffModal()">👥 名單</button>
+    <button class="btn" style="background: #27ae60;" id="toggleStatsBtn" onclick="toggleStatsVisibility()">📊 計算欄位</button>
+    <button class="btn" style="background: #0984e3;" onclick="exportToExcel()">📥 匯出 Excel</button>
 </div>
 
 <div class="table-container">
     <table id="dutyTable"></table>
 </div>
 
-<div id="staffModal" style="display:none; position:fixed; top:10%; left:10%; width:80%; background:white; border:2px solid #333; padding:20px; z-index:2000; border-radius:10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
-    <h3 style="margin-top:0;">隊員名單 (1-18)</h3>
+<div id="staffModal" style="display:none; position:fixed; top:10%; left:10%; width:80%; background:white; border:2px solid #333; padding:20px; z-index:2000; border-radius:10px;">
+    <h3>隊員名單管理 (1-18)</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:10px;"></div>
-    <div style="margin-top:20px; display:flex; gap:10px;">
-        <button class="btn btn-blue" onclick="saveStaffNames()" style="flex:1;">儲存設定</button>
-        <button class="btn btn-grey" onclick="toggleStaffModal()" style="flex:1;">取消</button>
-    </div>
+    <button class="btn" style="background: #0984e3; width: 100%; margin-top: 15px;" onclick="saveStaffNames()">儲存設定</button>
+    <button class="btn" style="background: #b2bec3; width: 100%; margin-top: 5px;" onclick="toggleStaffModal()">關閉</button>
 </div>
 
 <script>
@@ -103,7 +90,7 @@ let staffNames = [];
 let isStatsVisible = false;
 const quickOptions = ["休假1", "休假2", "換休1", "換休2", "月補", "公假A1"];
 
-// 顏色處理函數
+// 自動判定顏色
 function getStatusClass(val) {
     if (val.includes("休假")) return "status-holiday";
     if (val.includes("換休")) return "status-exchange";
@@ -112,24 +99,23 @@ function getStatusClass(val) {
     return "";
 }
 
-// 支援 Excel 貼上功能
+// 支援 Excel 貼上
 document.addEventListener('paste', function (e) {
     const activeEl = document.activeElement;
-    if (!activeEl.classList.contains('editable-content')) return;
-
+    if (!activeEl || !activeEl.classList.contains('editable-content')) return;
     e.preventDefault();
     const text = (e.clipboardData || window.clipboardData).getData('text');
-    const rows = text.split('\n');
+    const rows = text.split(/\r?\n/);
     const startTd = activeEl.closest('td');
     const startTr = startTd.closest('tr');
     const colIndex = Array.from(startTr.cells).indexOf(startTd);
     const trIndex = Array.from(startTr.parentNode.children).indexOf(startTr);
-    const table = document.getElementById('dutyTable');
+    const tableRows = document.getElementById('dutyTable').querySelectorAll('tbody tr');
 
-    rows.forEach((row, i) => {
-        if (!row.trim()) return;
-        const cols = row.split('\t');
-        const targetTr = table.querySelector(`tbody tr:nth-child(${trIndex + i + 1})`);
+    rows.forEach((rowText, i) => {
+        if (!rowText.trim()) return;
+        const cols = rowText.split('\t');
+        const targetTr = tableRows[trIndex + i];
         if (targetTr) {
             cols.forEach((cellData, j) => {
                 const targetTd = targetTr.cells[colIndex + j];
@@ -146,7 +132,11 @@ document.addEventListener('paste', function (e) {
 });
 
 function initTable() {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    const pickerVal = document.getElementById('monthPicker').value;
+    if(!pickerVal) return;
+    const [year, month] = pickerVal.split('-');
+    document.getElementById('toggleStatsBtn').innerText = isStatsVisible ? "隱藏計算" : "📊 顯示計算";
+    
     db.ref(`duty_system/global/staffNames`).on('value', (snap) => {
         staffNames = snap.val() || [];
         db.ref(`duty_system/${year}_${month}`).on('value', (snapshot) => {
@@ -173,7 +163,7 @@ function renderTable(year, month, data) {
         const rowData = savedData[d] || {};
         const isSun = (dayIdx === 0), isSat = (dayIdx === 6);
         
-        // 橫向統計
+        // 橫向統計邏輯
         let emptyCount = 0;
         staffNames.forEach((name, i) => { if (name && !(rowData['s'+i] || "").trim()) emptyCount++; });
         const deduct = parseInt(deductValues[d] || 0);
@@ -197,20 +187,18 @@ function renderTable(year, month, data) {
         html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td>
                  <td class="col-stat">${canLeave}</td>`;
         if (isStatsVisible) {
-            html += `<td>${emptyCount}</td>
-                     <td><input type="number" class="input-stat" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
-                     <td>${realSlots}</td>`;
+            html += `<td class="col-stat">${emptyCount}</td>
+                     <td class="col-stat"><input type="number" style="width:100%; border:none; text-align:center;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
+                     <td class="col-stat">${realSlots}</td>`;
         }
         html += `</tr>`;
     }
     document.getElementById('dutyTable').innerHTML = html;
 }
 
-// 匯出至 Excel
 function exportToExcel() {
-    const table = document.getElementById("dutyTable");
-    const wb = XLSX.utils.table_to_book(table, { sheet: "預定表" });
-    XLSX.writeFile(wb, `四湖分隊_${document.getElementById('monthPicker').value}_預定表.xlsx`);
+    const wb = XLSX.utils.table_to_book(document.getElementById("dutyTable"));
+    XLSX.writeFile(wb, `四湖分隊預定表_${document.getElementById('monthPicker').value}.xlsx`);
 }
 
 function quickFill(btn, text, day) {
@@ -232,4 +220,34 @@ function saveDayDeduct(day, val) {
 
 function saveRowData(day) {
     const [year, month] = document.getElementById('monthPicker').value.split('-');
-    const row = document.querySelector(`tr[data
+    const row = document.querySelector(`tr[data-day="${day}"]`);
+    if(!row) return;
+    const rowObj = { note: row.querySelector('.note-cell').innerText };
+    row.querySelectorAll('.cell .editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
+    db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
+}
+
+function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
+function toggleStaffModal() {
+    const modal = document.getElementById('staffModal');
+    if (modal.style.display === 'block') { modal.style.display = 'none'; } 
+    else {
+        const container = document.getElementById('staffInputs');
+        container.innerHTML = Array.from({length:18}).map((_, i) => `<div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:70%;"></div>`).join('');
+        modal.style.display = 'block';
+    }
+}
+function saveStaffNames() {
+    const newNames = [];
+    for (let i = 0; i < 18; i++) { newNames.push(document.getElementById(`staffInput${i}`).value.trim()); }
+    db.ref(`duty_system/global/staffNames`).set(newNames).then(() => toggleStaffModal());
+}
+
+(function(){
+    const now = new Date();
+    document.getElementById('monthPicker').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    initTable();
+})();
+</script>
+</body>
+</html>
