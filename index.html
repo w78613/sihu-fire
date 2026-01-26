@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 完整功能恢復整合版</title>
+    <title>四湖分隊雲端預定表 - 整合功能版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -47,8 +47,8 @@
 
 <div class="top-bar">
     <input type="month" id="monthPicker" onchange="initTable()">
-    <button class="btn" style="background: #636e72;" onclick="toggleStaffModal()">👥 名單與 V 班次設定</button>
-    <button class="btn" style="background: #e67e22;" onclick="applyDutyCycle()">🔄 帶入 V1-V9 勤二休二</button>
+    <button class="btn" style="background: #636e72;" onclick="toggleStaffModal()">👥 名單與起始日</button>
+    <button class="btn" style="background: #e67e22;" onclick="applyDutyCycle()">🔄 勤休制度</button>
     <button class="btn" style="background: #27ae60;" onclick="toggleStatsVisibility()">📊 計算欄位</button>
     <button class="btn" style="background: #0984e3;" onclick="exportToExcel()">📥 匯出 Excel</button>
 </div>
@@ -59,11 +59,11 @@
 
 <div class="modal-overlay" id="modalOverlay" onclick="closeAllModals()"></div>
 <div id="staffModal">
-    <h3>👥 人員名單與起始日設定</h3>
+    <h3>👥 名單與起始日設定</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;"></div>
     <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ccc;">
-        <button class="btn" style="background: #0984e3; width: 100%; margin-bottom: 10px;" onclick="saveStaffData()">✅ 儲存人員設定</button>
-        <button class="btn" style="background: #d63031; width: 100%; opacity: 0.8;" onclick="clearCurrentMonth()">🧹 清空本月假別與備註</button>
+        <button class="btn" style="background: #0984e3; width: 100%; margin-bottom: 10px;" onclick="saveStaffData()">✅ 儲存設定</button>
+        <button class="btn" style="background: #d63031; width: 100%; opacity: 0.8;" onclick="clearCurrentMonth()">🧹 清空本月假別內容</button>
     </div>
 </div>
 
@@ -142,7 +142,6 @@ function renderTable(year, month, data) {
         html += `</tr>`;
     }
 
-    // 填假順序列
     html += `<tr class="order-row"><td colspan="2">填假順序</td>`;
     staffData.forEach((s, i) => {
         if(s.name) html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`;
@@ -159,13 +158,12 @@ function handleManualInput(cell) {
         tr.querySelectorAll('.editable-content').forEach(el => {
             if (el.innerText.trim() === "") emptyCount++;
         });
-        // 取得該列預扣
         const picker = document.getElementById('monthPicker').value;
         const [year, month] = picker.split('-');
         db.ref(`duty_system/${year}_${month}/settings/dayDeducts/${tr.dataset.day}`).once('value', (snap) => {
             const deduct = parseInt(snap.val() || 0);
             if ((emptyCount - deduct) < 5) {
-                alert("⚠️ 無法輸入！該日剩餘人力已達下限 (5人)。");
+                alert("⚠️ 無法輸入！剩餘人力已達下限 (5人)。");
                 cell.innerText = "";
                 saveRowData(tr.dataset.day);
             }
@@ -178,7 +176,7 @@ function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
     let updates = {};
-    if(!confirm(`確定要根據起始日自動填入 V1-V9 班次嗎？`)) return;
+    if(!confirm(`確定執行「勤休制度」自動帶入 V1-V9 文字嗎？`)) return;
 
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
@@ -193,7 +191,7 @@ function applyDutyCycle() {
             }
         });
     }
-    db.ref(`duty_system/${year}_${month}/content`).update(updates);
+    db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => alert("✅ 自動帶入完成"));
 }
 
 function saveRowData(day) {
@@ -221,7 +219,7 @@ function toggleStaffModal() {
     document.getElementById('staffInputs').innerHTML = Array.from({length:18}).map((_, i) => {
         const s = staffData[i] || { name: '', startDate: '', vType: '' };
         return `<div class="staff-input-group">
-            <div style="font-weight:bold;">人員 ${i+1}</div>
+            <div>人員 ${i+1}</div>
             <input type="text" placeholder="姓名" value="${s.name}" id="name${i}">
             <select id="vType${i}">${vOptions.replace(`value="${s.vType}"`, `value="${s.vType}" selected`)}</select>
             <input type="date" value="${s.startDate || ''}" id="date${i}">
@@ -245,7 +243,7 @@ function saveStaffData() {
 
 function clearCurrentMonth() {
     const [year, month] = document.getElementById('monthPicker').value.split('-');
-    if (confirm("確定清空本月內容？(保留預扣與順序)")) db.ref(`duty_system/${year}_${month}/content`).remove();
+    if (confirm("確定清空內容？(保留預扣與順序)")) db.ref(`duty_system/${year}_${month}/content`).remove();
 }
 
 function exportToExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("dutyTable")), `四湖預定表.xlsx`); }
