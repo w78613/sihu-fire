@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - V序號最終修正版</title>
+    <title>四湖分隊雲端預定表 - V序號絕對修正版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -165,7 +165,7 @@ function handleManualInput(cell) {
     saveRowData(tr.dataset.day);
 }
 
-// 核心修正：確保假日 V 序號顯示
+// 最終修正邏輯
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
@@ -175,6 +175,7 @@ function applyDutyCycle() {
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
         const dayIdx = currentDate.getDay(); 
+        const isWeekday = (dayIdx >= 1 && dayIdx <= 5);
         let vCounter = 1; 
         
         staffData.forEach((s, i) => {
@@ -183,25 +184,21 @@ function applyDutyCycle() {
                 const diffDays = Math.floor((currentDate - start) / 86400000);
                 if (diffDays >= 0) {
                     const cycle = diffDays % 4;
-                    const isOffDay = (cycle === 0 || cycle === 1);
+                    const isScheduleOff = (cycle === 0 || cycle === 1); // 判定起始日是否輪到放假
                     
-                    // 1. 先決定該人領到的 V 序號
-                    let assignedV = "";
-                    if (isOffDay) {
-                        assignedV = (vCounter <= 9) ? `V${vCounter}` : "休假";
+                    let vLabel = "";
+                    if (isScheduleOff) {
+                        vLabel = (vCounter <= 9) ? `V${vCounter}` : "休假";
                         vCounter++;
                     }
 
-                    // 2. 決定最後要在表格顯示什麼
-                    if (s.isTraining && dayIdx >= 1 && dayIdx <= 5) {
-                        // 平日受訓：不論有沒有 V 序號，一律顯示公假A1
+                    // 核心顯示判斷
+                    if (s.isTraining && isWeekday) {
+                        // 受訓者平日：不管輪到什麼，一律 A1
                         updates[`${d}/s${i}`] = "公假A1";
-                    } else if (isOffDay) {
-                        // 假日或是非受訓人員：顯示領到的 V 序號
-                        updates[`${d}/s${i}`] = assignedV;
                     } else {
-                        // 其餘情況（上班日）：清空內容
-                        updates[`${d}/s${i}`] = "";
+                        // 其餘情況（受訓者假日 或 一般人）：依照起始日判斷
+                        updates[`${d}/s${i}`] = isScheduleOff ? vLabel : "";
                     }
                 }
             }
