@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 人力防呆版</title>
+    <title>四湖分隊雲端預定表 - 自動跳月版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -98,7 +98,6 @@
 let staffNames = [];
 let isStatsVisible = false;
 let currentActiveCell = null;
-let currentMonthData = {};
 
 function closeAllModals() {
     document.getElementById('staffModal').style.display = 'none';
@@ -117,29 +116,23 @@ function showQuickMenu(e, cell) {
 
 function setQuickVal(val) {
     if (!currentActiveCell) return;
-    
     const tr = currentActiveCell.closest('tr');
     const day = tr.dataset.day;
     
-    // 預先檢查人力 (防呆邏輯)
     if (val !== "") {
         let emptyCount = 0;
         tr.querySelectorAll('.cell .editable-content').forEach(el => {
-            if (el === currentActiveCell) { if (val === "") emptyCount++; } // 模擬填入後的狀態
+            if (el === currentActiveCell) { if (val === "") emptyCount++; }
             else { if (el.innerText.trim() === "") emptyCount++; }
         });
-        
-        const picker = document.getElementById('monthPicker').value.split('-');
         const deduct = parseInt(tr.querySelector('.deduct-input')?.value || 0);
         const realSlots = emptyCount - deduct;
-
         if (realSlots < 5) {
             alert("⚠️ 無法填假！\n該日剩餘人力已達下限 (真實總數不可小於 5)。");
             closeAllModals();
             return;
         }
     }
-
     currentActiveCell.innerText = val;
     saveRowData(day);
     closeAllModals();
@@ -154,8 +147,7 @@ function initTable() {
     db.ref(`duty_system/global/staffNames`).on('value', (snap) => {
         staffNames = snap.val() || [];
         db.ref(`duty_system/${year}_${month}`).on('value', (snapshot) => {
-            currentMonthData = snapshot.val() || {};
-            renderTable(year, month, currentMonthData);
+            renderTable(year, month, snapshot.val() || {});
         });
     });
 }
@@ -240,7 +232,9 @@ function saveDayDeduct(day, val) {
 }
 
 function saveRowData(day) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    const picker = document.getElementById('monthPicker').value;
+    if(!picker) return;
+    const [year, month] = picker.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
     if(!row) return;
     const rowObj = { note: row.querySelector('.note-cell').innerText };
@@ -268,9 +262,15 @@ function exportToExcel() {
     XLSX.writeFile(wb, `四湖預定表_${document.getElementById('monthPicker').value}.xlsx`);
 }
 
+// 修改處：網頁載入自動設為下個月
 (function(){
     const now = new Date();
-    document.getElementById('monthPicker').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    // 設定到下個月的第一天
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const year = nextMonth.getFullYear();
+    const month = String(nextMonth.getMonth() + 1).padStart(2, '0');
+    
+    document.getElementById('monthPicker').value = `${year}-${month}`;
     initTable();
 })();
 </script>
