@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表</title>
+    <title>四湖分隊雲端預定表 - 穩定版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -27,32 +27,32 @@
     <style>
         :root {
             --header-dark: #2c3e50;
-            --sunday-red: #ff7675;
-            --saturday-orange: #fab1a0;
-            --color-holiday: #d4edda;
-            --color-exchange: #fff3cd;
-            --color-monthly: #c1e1f5;
-            --color-official: #f8d7da;
+            --color-holiday: #d4edda;  /* 休假: 綠 */
+            --color-exchange: #fff3cd; /* 換休: 黃 */
+            --color-monthly: #c1e1f5;  /* 月補: 藍 */
+            --color-official: #f8d7da; /* 公假: 紅 */
         }
         body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; background: #f8f9fa; }
-        .top-bar { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 10px; background: white; position: sticky; top: 0; z-index: 1000; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .top-bar { display: flex; gap: 10px; padding: 10px; background: white; position: sticky; top: 0; z-index: 1000; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         
         .table-container { overflow: auto; max-height: 88vh; padding: 10px; }
-        table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; }
-        th, td { border: 1px solid #ccc; text-align: center; font-size: 13px; height: 38px; min-width: 65px; box-sizing: border-box; }
+        table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; table-layout: fixed; }
+        th, td { border: 1px solid #ccc; text-align: center; font-size: 13px; height: 38px; min-width: 65px; box-sizing: border-box; overflow: hidden; }
         
+        /* 固定列 */
         thead th { position: sticky; top: 0; z-index: 100; background: var(--header-dark); color: white; }
         .col-date-fixed { position: sticky; left: 0; z-index: 91; width: 45px; background: white; border-right: 1px solid #333; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; width: 45px; background: white; border-right: 2px solid #333 !important; }
         thead th.col-date-fixed, thead th.col-week-fixed { z-index: 110; background: var(--header-dark); }
 
-        .col-staff { width: 75px; font-weight: bold; }
+        .col-staff { width: 80px; font-weight: bold; }
         .col-note { width: 120px; border-right: 2px solid #333; }
         
-        /* 統計欄位標題樣式 */
-        .col-stat { width: 80px; font-weight: bold; background: #fdfdfd; }
-        .stat-header { background: #bfbfbf !important; color: black !important; border-left: 2px solid #333; }
+        /* 統計欄位 */
+        .col-stat { width: 80px; font-weight: bold; }
+        .stat-header { background: #bfbfbf !important; color: black !important; }
 
+        /* 配色聯動 */
         .status-holiday { background-color: var(--color-holiday) !important; }
         .status-exchange { background-color: var(--color-exchange) !important; }
         .status-monthly { background-color: var(--color-monthly) !important; }
@@ -60,10 +60,8 @@
 
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; }
         .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
-        .warning-text { color: red; font-size: 11px; }
-        
-        /* 底部填假順序行 */
         .order-row { background: #f1f8e9; font-weight: bold; }
+        .warning-text { color: red; font-size: 11px; }
     </style>
 </head>
 <body>
@@ -86,11 +84,12 @@ let isStatsVisible = false;
 function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
 
 function initTable() {
-    const picker = document.getElementById('monthPicker').value;
-    if(!picker) return;
-    const [year, month] = picker.split('-');
+    const pickerVal = document.getElementById('monthPicker').value;
+    if(!pickerVal) return;
+    const [year, month] = pickerVal.split('-');
     
-    db.ref(`duty_system/global/staffNames`).on('value', (snap) => {
+    // 先抓名單，再抓內容，防止渲染時 staffNames 為空導致報錯
+    db.ref(`duty_system/global/staffNames`).once('value', (snap) => {
         staffNames = snap.val() || [];
         db.ref(`duty_system/${year}_${month}`).on('value', (snapshot) => {
             renderTable(year, month, snapshot.val() || {});
@@ -105,17 +104,16 @@ function renderTable(year, month, data) {
     const orderData = settings.orderData || {};
     const daysInMonth = new Date(year, month, 0).getDate();
     
-    // 建立表頭
+    // 表頭：依照片順序排列
     let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
     staffNames.forEach(name => { if(name) html += `<th class="col-staff">${name}</th>`; });
     html += `<th class="col-note">備註</th>`;
+    html += `<th class="col-stat stat-header">可填假</th>`; // 灰色標題
     
-    // 依據照片順序新增統計標題
-    html += `<th class="col-stat stat-header">可填假</th>`;
     if (isStatsVisible) {
-        html += `<th class="col-stat" style="background:#f2f2f2 !important;">預計格數</th>
-                 <th class="col-stat" style="background:#f2f2f2 !important;">預扣天數</th>
-                 <th class="col-stat" style="background:#f2f2f2 !important;">真實格子總數</th>`;
+        html += `<th class="col-stat">預計格數</th>
+                 <th class="col-stat">預扣天數</th>
+                 <th class="col-stat">真實格子總數</th>`;
     }
     html += `</tr></thead><tbody>`;
 
@@ -125,13 +123,12 @@ function renderTable(year, month, data) {
         const rowData = savedData[d] || {};
         const isSun = (dayIdx === 0), isSat = (dayIdx === 6);
         
-        // 計算當日空白格
+        // 統計邏輯
         let emptyCount = 0;
         staffNames.forEach((name, i) => { if (name && !(rowData['s'+i] || "").trim()) emptyCount++; });
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyCount - deduct;
         
-        // 判定可填假數量
         let canLeave = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : ""));
         if (realSlots <= 4) canLeave = `<span class="warning-text">無法填假</span>`;
 
@@ -146,13 +143,13 @@ function renderTable(year, month, data) {
             }
         });
 
-        // 統計內容：備註 -> 可填假 -> 預計格數 -> 預扣 -> 真實總數
+        // 右側統計排列
         html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td>
                  <td class="col-stat">${canLeave}</td>`;
         if (isStatsVisible) {
-            html += `<td class="col-stat">${emptyCount}</td>
-                     <td class="col-stat"><input type="number" style="width:100%; border:none; text-align:center; background:transparent;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
-                     <td class="col-stat">${realSlots}</td>`;
+            html += `<td>${emptyCount}</td>
+                     <td><input type="number" style="width:100%; border:none; text-align:center; background:transparent;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
+                     <td>${realSlots}</td>`;
         }
         html += `</tr>`;
     }
@@ -160,9 +157,7 @@ function renderTable(year, month, data) {
     // 底部填假順序
     html += `<tr class="order-row"><td colspan="2">填假順序</td>`;
     staffNames.forEach((name, i) => {
-        if(name) {
-            html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`;
-        }
+        if(name) html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`;
     });
     html += `<td colspan="${isStatsVisible ? 5 : 2}"></td></tr></tbody>`;
     
@@ -177,4 +172,37 @@ function getStatusClass(v) {
     return "";
 }
 
-function saveOrderData(index
+function saveOrderData(idx, val) {
+    const picker = document.getElementById('monthPicker').value;
+    const [year, month] = picker.split('-');
+    db.ref(`duty_system/${year}_${month}/settings/orderData`).update({ ['s'+idx]: val });
+}
+
+function saveDayDeduct(day, val) {
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
+}
+
+function saveRowData(day) {
+    const picker = document.getElementById('monthPicker').value;
+    const [year, month] = picker.split('-');
+    const row = document.querySelector(`tr[data-day="${day}"]`);
+    if(!row) return;
+    const rowObj = { note: row.querySelector('.note-cell').innerText };
+    row.querySelectorAll('.cell .editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
+    db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
+}
+
+function exportToExcel() {
+    const wb = XLSX.utils.table_to_book(document.getElementById("dutyTable"));
+    XLSX.writeFile(wb, `預定表_${document.getElementById('monthPicker').value}.xlsx`);
+}
+
+(function(){
+    const now = new Date();
+    document.getElementById('monthPicker').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    initTable();
+})();
+</script>
+</body>
+</html>
