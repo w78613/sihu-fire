@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 勤二休二隨機分配版</title>
+    <title>四湖分隊雲端預定表 - 勤休自動帶入版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -25,31 +25,47 @@
     </script>
 
     <style>
-        :root { --header-dark: #2c3e50; }
+        :root {
+            --header-dark: #2c3e50;
+            --color-holiday: #d4edda;
+            --color-exchange: #fff3cd;
+            --color-monthly: #c1e1f5;
+            --color-official: #f8d7da;
+        }
         body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
-        .top-bar { display: flex; gap: 10px; padding: 10px; background: white; position: sticky; top: 0; z-index: 1000; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); flex-wrap: wrap; }
+        .top-bar { display: flex; gap: 8px; padding: 10px; background: white; position: sticky; top: 0; z-index: 1000; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); flex-wrap: wrap; }
         .table-container { overflow: auto; max-height: 85vh; padding: 10px; }
         table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; }
         th, td { border: 1px solid #ccc; text-align: center; font-size: 13px; height: 38px; min-width: 80px; box-sizing: border-box; }
-        thead th { position: sticky; top: 0; z-index: 100; background: var(--header-dark); color: white; }
-        .col-date-fixed { position: sticky; left: 0; z-index: 91; background: white; border-right: 1px solid #333; }
-        .col-week-fixed { position: sticky; left: 80px; z-index: 91; background: white; border-right: 2px solid #333 !important; }
-        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
-        .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
         
-        #staffModal, #dutySystemModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 90%; max-width: 600px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; }
+        thead th { position: sticky; top: 0; z-index: 100; background: var(--header-dark); color: white; }
+        .col-date-fixed { position: sticky; left: 0; z-index: 91; width: 45px !important; background: white; border-right: 1px solid #333; }
+        .col-week-fixed { position: sticky; left: 45px; z-index: 91; width: 45px !important; background: white; border-right: 2px solid #333 !important; }
+        
+        .status-holiday { background-color: var(--color-holiday) !important; }
+        .status-exchange { background-color: var(--color-exchange) !important; }
+        .status-monthly { background-color: var(--color-monthly) !important; }
+        .status-official { background-color: var(--color-official) !important; }
+
+        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
+        .editable-content:focus { background: #e3f2fd; }
+        
+        .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
+        .order-row { background: #f1f8e9; font-weight: bold; border-top: 2px solid #333; }
+
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
-        .staff-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+        #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 800px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
+        .staff-input-group { border: 1px solid #eee; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 5px; background: #fafafa; }
     </style>
 </head>
 <body>
 
 <div class="top-bar">
     <input type="month" id="monthPicker" onchange="initTable()">
-    <button class="btn" style="background: #636e72;" onclick="toggleStaffModal()">👥 名單</button>
-    <button class="btn" style="background: #e67e22;" onclick="toggleDutySystemModal()">⚙️ 勤休制度</button>
+    <button class="btn" style="background: #636e72;" onclick="toggleStaffModal()">👥 名單設定</button>
+    <button class="btn" style="background: #e67e22;" onclick="applyDutyCycle()">🔄 勤休自動帶入</button>
     <button class="btn" style="background: #27ae60;" onclick="toggleStatsVisibility()">📊 計算欄位</button>
-    <button class="btn" style="background: #0984e3;" onclick="exportToExcel()">📥 匯出</button>
+    <button class="btn" style="background: #0984e3;" onclick="exportToExcel()">📥 匯出 Excel</button>
 </div>
 
 <div class="table-container">
@@ -57,152 +73,215 @@
 </div>
 
 <div class="modal-overlay" id="modalOverlay" onclick="closeAllModals()"></div>
-<div id="dutySystemModal">
-    <h3>⚙️ 勤二休二帶入設定</h3>
-    <label>請選擇「放假第一天」的日期：</label><br><br>
-    <input type="date" id="cycleStartDate" style="width: 100%; padding: 10px; box-sizing: border-box;"><br><br>
-    <p style="font-size: 12px; color: #666;">系統將以此日為準，將 V1-V11 平均分配於 4 天循環中，確保每日放假人員不重複。</p>
-    <button class="btn" style="background: #e67e22; width: 100%;" onclick="applyDutyCycle()">🔄 執行自動帶入</button>
-</div>
-
 <div id="staffModal">
-    <h3 style="margin-top:0;">👥 隊員名單</h3>
-    <div id="staffInputs" class="staff-grid"></div>
-    <div style="margin-top: 20px;">
-        <button class="btn" style="background: #0984e3; width: 100%;" onclick="saveStaffNames()">✅ 儲存名單</button>
-        <button class="btn" style="background: #d63031; width: 100%; margin-top: 10px;" onclick="clearCurrentMonth()">🧹 清除假別與備註</button>
+    <h3 style="margin-top:0;">👥 隊員設定 (姓名/班次/起始日)</h3>
+    <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:10px;"></div>
+    
+    <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ccc;">
+        <button class="btn" style="background: #0984e3; width: 100%; margin-bottom: 10px;" onclick="saveStaffData()">✅ 儲存設定</button>
+        <button class="btn" style="background: #d63031; width: 100%; opacity: 0.8;" onclick="clearCurrentMonth()">🧹 清除本月假別與備註</button>
     </div>
 </div>
 
 <script>
-let staffNames = [];
+let staffData = []; // 儲存包含姓名與起始日期的物件陣列
 let isStatsVisible = false;
 
-// 關鍵偏移量分配：確保 V1-V11 在 4 天循環內均勻分布不重複
-const V_DISTRIBUTION = {
-    'V1': 0, 'V2': 0, 'V3': 0,  // 第一群：第0,1天休
-    'V4': 1, 'V5': 1, 'V6': 1,  // 第二群：第1,2天休
-    'V7': 2, 'V8': 2, 'V9': 2,  // 第三群：第2,3天休
-    'V10': 3, 'V11': 3          // 第四群：第3,0天休
-};
+function closeAllModals() {
+    document.getElementById('staffModal').style.display = 'none';
+    document.getElementById('modalOverlay').style.display = 'none';
+}
+
+function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
 
 function initTable() {
-    const picker = document.getElementById('monthPicker').value;
-    const [year, month] = picker.split('-');
-    db.ref(`duty_system/global/staffNames`).on('value', (snap) => {
-        staffNames = snap.val() || [];
+    const pickerVal = document.getElementById('monthPicker').value;
+    if(!pickerVal) return;
+    const [year, month] = pickerVal.split('-');
+    
+    // 讀取全域人員設定
+    db.ref(`duty_system/global/staffData`).on('value', (snap) => {
+        staffData = snap.val() || [];
+        // 讀取該月排班資料
         db.ref(`duty_system/${year}_${month}`).on('value', (snapshot) => {
             renderTable(year, month, snapshot.val() || {});
         });
     });
 }
 
-function applyDutyCycle() {
-    const startStr = document.getElementById('cycleStartDate').value;
-    if(!startStr) return alert("請先選擇起始日期！");
-    const startDate = new Date(startStr);
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
+function renderTable(year, month, data) {
+    const savedData = data.content || {};
+    const settings = data.settings || {};
+    const deductValues = settings.dayDeducts || {};
+    const orderData = settings.orderData || {};
     const daysInMonth = new Date(year, month, 0).getDate();
     
+    let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
+    staffData.forEach(s => { if(s.name) html += `<th class="col-staff">${s.name}</th>`; });
+    html += `<th class="col-note">備註</th><th class="col-stat">可填假</th>`;
+    
+    if (isStatsVisible) {
+        html += `<th class="col-stat" style="background:#eee!important;">預計</th>
+                 <th class="col-stat" style="background:#eee!important;">預扣</th>
+                 <th class="col-stat" style="background:#eee!important;">真實</th>`;
+    }
+    html += `</tr></thead><tbody>`;
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(year, month - 1, d);
+        const dayIdx = date.getDay();
+        const rowData = savedData[d] || {};
+        const isSun = (dayIdx === 0), isSat = (dayIdx === 6);
+        
+        let emptyCount = 0;
+        staffData.forEach((s, i) => { if (s.name && !(rowData['s'+i] || "").trim()) emptyCount++; });
+        const deduct = parseInt(deductValues[d] || 0);
+        const realSlots = emptyCount - deduct;
+        let canLeave = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : "X"));
+
+        html += `<tr data-day="${d}">
+            <td class="col-date-fixed" style="color:${isSun?'red':(isSat?'#e67e22':'#333')}">${d}</td>
+            <td class="col-week-fixed" style="color:${isSun?'red':(isSat?'#e67e22':'#333')}">${["日","一","二","三","四","五","六"][dayIdx]}</td>`;
+        
+        staffData.forEach((s, i) => {
+            if(s.name) {
+                const val = rowData['s'+i] || '';
+                html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" onblur="handleManualInput(this)">${val}</div></td>`;
+            }
+        });
+
+        html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td>
+                 <td class="col-stat">${canLeave}</td>`;
+        if (isStatsVisible) {
+            html += `<td class="col-stat">${emptyCount}</td>
+                     <td class="col-stat"><input type="number" class="deduct-input" style="width:100%; border:none; text-align:center;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
+                     <td class="col-stat">${realSlots}</td>`;
+        }
+        html += `</tr>`;
+    }
+    // 填假順序列
+    html += `<tr class="order-row"><td colspan="2">填假順序</td>`;
+    staffData.forEach((s, i) => {
+        if(s.name) html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`;
+    });
+    html += `<td colspan="${isStatsVisible ? 5 : 2}"></td></tr></tbody>`;
+    document.getElementById('dutyTable').innerHTML = html;
+}
+
+// 勤休自動計算核心
+function applyDutyCycle() {
+    const picker = document.getElementById('monthPicker').value;
+    if(!picker) return;
+    const [year, month] = picker.split('-');
+    const daysInMonth = new Date(year, month, 0).getDate();
     let updates = {};
+
+    if(!confirm(`⚠️ 確定要依照設定的起始日自動填入 ${month} 月的「休假」嗎？\n(這將覆蓋現有的假別)`)) return;
+
     for (let d = 1; d <= daysInMonth; d++) {
         const currentDate = new Date(year, month - 1, d);
-        // 計算與起始日的差距
-        const diffDays = Math.floor((currentDate - startDate) / (1000 * 60 * 60 * 24));
-        
-        staffNames.forEach((name, i) => {
-            if (name) {
-                // 從名字或對應關係中尋找他是哪個 V (假設您的名單按 V1-V11 順序排列或手動對應)
-                // 這裡簡化為前 11 位人員對應 V1-V11
-                const vKey = `V${i + 1}`; 
-                if (V_DISTRIBUTION[vKey] !== undefined) {
-                    const offset = V_DISTRIBUTION[vKey];
-                    const cyclePos = ((diffDays + offset) % 4 + 4) % 4;
-                    
-                    // 0, 1 為休息日
-                    if (cyclePos === 0 || cyclePos === 1) {
-                        updates[`${d}/s${i}`] = vKey;
+        staffData.forEach((s, i) => {
+            if(s.name && s.startDate) {
+                const start = new Date(s.startDate);
+                // 計算天數差距 (毫秒轉天)
+                const diffTime = currentDate - start;
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                
+                // 勤二休二邏輯: (天數 % 4)
+                // 假設起始日當天為「休假第一天」: 0, 1 為休，2, 3 為勤
+                if (diffDays >= 0) {
+                    const cycle = diffDays % 4;
+                    if (cycle === 0 || cycle === 1) {
+                        updates[`${d}/s${i}`] = "休假";
                     } else {
-                        updates[`${d}/s${i}`] = ""; // 上班空白
+                        updates[`${d}/s${i}`] = "";
                     }
                 }
             }
         });
     }
 
-    if (confirm("確定依照此起始日帶入勤二休二？")) {
-        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => {
-            alert("✅ 自動帶入完成");
+    db.ref(`duty_system/${year}_${month}/content`).update(updates)
+        .then(() => alert("✅ 勤休帶入成功！"));
+}
+
+function getStatusClass(v) {
+    if (v.includes("休假")) return "status-holiday";
+    if (v.includes("換休")) return "status-exchange";
+    if (v.includes("月補")) return "status-monthly";
+    if (v.includes("公假")) return "status-official";
+    return "";
+}
+
+function handleManualInput(cell) {
+    const tr = cell.closest('tr');
+    const val = cell.innerText.trim();
+    cell.closest('td').className = `cell ${getStatusClass(val)}`;
+    saveRowData(tr.dataset.day);
+}
+
+function saveRowData(day) {
+    const picker = document.getElementById('monthPicker').value;
+    const [year, month] = picker.split('-');
+    const row = document.querySelector(`tr[data-day="${day}"]`);
+    const rowObj = { note: row.querySelector('.note-cell').innerText };
+    row.querySelectorAll('.cell .editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
+    db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
+}
+
+function saveOrderData(idx, val) {
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    db.ref(`duty_system/${year}_${month}/settings/orderData`).update({ ['s'+idx]: val });
+}
+
+function saveDayDeduct(day, val) {
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
+}
+
+function toggleStaffModal() {
+    const modal = document.getElementById('staffModal');
+    document.getElementById('staffInputs').innerHTML = Array.from({length:18}).map((_, i) => {
+        const s = staffData[i] || { name: '', startDate: '' };
+        return `<div class="staff-input-group">
+            <div style="font-weight:bold; color:#2c3e50;">人員 ${i+1}</div>
+            <input type="text" placeholder="姓名" value="${s.name}" id="name${i}" style="padding:5px;">
+            <div style="font-size:11px; color:#666;">休假起始日：</div>
+            <input type="date" value="${s.startDate || ''}" id="date${i}" style="padding:5px;">
+        </div>`;
+    }).join('');
+    modal.style.display = 'block';
+    document.getElementById('modalOverlay').style.display = 'block';
+}
+
+function saveStaffData() {
+    const newData = [];
+    for (let i = 0; i < 18; i++) {
+        newData.push({
+            name: document.getElementById(`name${i}`).value.trim(),
+            startDate: document.getElementById(`date${i}`).value
+        });
+    }
+    db.ref(`duty_system/global/staffData`).set(newData).then(() => {
+        alert("人員與班次設定已儲存");
+        closeAllModals();
+    });
+}
+
+function clearCurrentMonth() {
+    const picker = document.getElementById('monthPicker').value;
+    const [year, month] = picker.split('-');
+    if (confirm(`⚠️ 確定要清空 ${year}年${month}月 的假別內容嗎？`)) {
+        db.ref(`duty_system/${year}_${month}/content`).remove().then(() => {
+            alert("已清空");
             closeAllModals();
         });
     }
 }
 
-function renderTable(year, month, data) {
-    const savedData = data.content || {};
-    const settings = data.settings || {};
-    const daysInMonth = new Date(year, month, 0).getDate();
-    
-    let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
-    staffNames.forEach(name => { if(name) html += `<th>${name}</th>`; });
-    html += `<th>備註</th><th>可填</th></tr></thead><tbody>`;
-
-    for (let d = 1; d <= daysInMonth; d++) {
-        const date = new Date(year, month - 1, d);
-        const dayIdx = date.getDay();
-        const rowData = savedData[d] || {};
-        
-        html += `<tr data-day="${d}">
-            <td class="col-date-fixed">${d}</td>
-            <td class="col-week-fixed">${["日","一","二","三","四","五","六"][dayIdx]}</td>`;
-        
-        staffNames.forEach((name, i) => {
-            if(name) {
-                const val = rowData['s'+i] || '';
-                html += `<td><div contenteditable="true" class="editable-content" onblur="saveRowData(${d})">${val}</div></td>`;
-            }
-        });
-        html += `<td contenteditable="true" class="note-cell" onblur="saveRowData(${d})">${rowData.note || ''}</td><td>-</td></tr>`;
-    }
-    document.getElementById('dutyTable').innerHTML = html;
-}
-
-function saveRowData(day) {
-    const picker = document.getElementById('monthPicker').value.split('-');
-    const row = document.querySelector(`tr[data-day="${day}"]`);
-    const rowObj = { note: row.querySelector('.note-cell').innerText };
-    row.querySelectorAll('.editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
-    db.ref(`duty_system/${picker[0]}_${picker[1]}/content/${day}`).update(rowObj);
-}
-
-function toggleStaffModal() {
-    document.getElementById('staffInputs').innerHTML = Array.from({length:18}).map((_, i) => 
-        `<div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:75%;"></div>`
-    ).join('');
-    document.getElementById('staffModal').style.display = 'block';
-    document.getElementById('modalOverlay').style.display = 'block';
-}
-
-function saveStaffNames() {
-    const newNames = [];
-    for (let i = 0; i < 18; i++) newNames.push(document.getElementById(`staffInput${i}`).value.trim());
-    db.ref(`duty_system/global/staffNames`).set(newNames).then(() => closeAllModals());
-}
-
-function toggleDutySystemModal() {
-    document.getElementById('dutySystemModal').style.display = 'block';
-    document.getElementById('modalOverlay').style.display = 'block';
-}
-
-function closeAllModals() {
-    document.getElementById('staffModal').style.display = 'none';
-    document.getElementById('dutySystemModal').style.display = 'none';
-    document.getElementById('modalOverlay').style.display = 'none';
-}
-
-function clearCurrentMonth() {
-    const picker = document.getElementById('monthPicker').value.split('-');
-    if(confirm("確定清空？")) db.ref(`duty_system/${picker[0]}_${picker[1]}/content`).remove();
+function exportToExcel() {
+    const wb = XLSX.utils.table_to_book(document.getElementById("dutyTable"));
+    XLSX.writeFile(wb, `四湖預定表_${document.getElementById('monthPicker').value}.xlsx`);
 }
 
 (function(){
