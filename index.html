@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 自動跳月版</title>
+    <title>四湖分隊雲端預定表 - 靈活輸入版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -42,7 +42,7 @@
         .col-date-fixed { position: sticky; left: 0; z-index: 91; width: 45px; background: white; border-right: 1px solid #333; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; width: 45px; background: white; border-right: 2px solid #333 !important; }
         
-        .col-staff { width: 85px; font-weight: bold; cursor: pointer; }
+        .col-staff { width: 85px; font-weight: bold; }
         .col-note { width: 130px; border-right: 2px solid #333; }
         .col-stat { width: 85px; font-weight: bold; }
         .stat-header { background: #bfbfbf !important; color: black !important; }
@@ -105,7 +105,8 @@ function closeAllModals() {
     document.getElementById('quickMenu').style.display = 'none';
 }
 
-function showQuickMenu(e, cell) {
+// 修改點：點擊觸發選單，但保留 contenteditable 讓用戶可以輸入
+function onCellClick(e, cell) {
     currentActiveCell = cell;
     const menu = document.getElementById('quickMenu');
     menu.style.display = 'block';
@@ -114,28 +115,36 @@ function showQuickMenu(e, cell) {
     document.getElementById('modalOverlay').style.display = 'block';
 }
 
+function checkManpower(cell, newVal) {
+    const tr = cell.closest('tr');
+    let emptyCount = 0;
+    tr.querySelectorAll('.cell .editable-content').forEach(el => {
+        const text = (el === cell) ? newVal.trim() : el.innerText.trim();
+        if (text === "") emptyCount++;
+    });
+    const deduct = parseInt(tr.querySelector('.deduct-input')?.value || 0);
+    return (emptyCount - deduct);
+}
+
 function setQuickVal(val) {
     if (!currentActiveCell) return;
-    const tr = currentActiveCell.closest('tr');
-    const day = tr.dataset.day;
-    
-    if (val !== "") {
-        let emptyCount = 0;
-        tr.querySelectorAll('.cell .editable-content').forEach(el => {
-            if (el === currentActiveCell) { if (val === "") emptyCount++; }
-            else { if (el.innerText.trim() === "") emptyCount++; }
-        });
-        const deduct = parseInt(tr.querySelector('.deduct-input')?.value || 0);
-        const realSlots = emptyCount - deduct;
-        if (realSlots < 5) {
-            alert("⚠️ 無法填假！\n該日剩餘人力已達下限 (真實總數不可小於 5)。");
-            closeAllModals();
-            return;
-        }
+    if (val !== "" && checkManpower(currentActiveCell, val) < 5) {
+        alert("⚠️ 無法填假！該日剩餘人力已達下限。");
+        closeAllModals();
+        return;
     }
     currentActiveCell.innerText = val;
-    saveRowData(day);
+    saveRowData(currentActiveCell.closest('tr').dataset.day);
     closeAllModals();
+}
+
+function handleManualInput(cell) {
+    const val = cell.innerText.trim();
+    if (val !== "" && checkManpower(cell, val) < 5) {
+        alert("⚠️ 無法輸入！該日剩餘人力已達下限。");
+        cell.innerText = ""; // 強制清空
+    }
+    saveRowData(cell.closest('tr').dataset.day);
 }
 
 function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
@@ -180,7 +189,6 @@ function renderTable(year, month, data) {
         staffNames.forEach((name, i) => { if (name && !(rowData['s'+i] || "").trim()) emptyCount++; });
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyCount - deduct;
-        
         let canLeave = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : ""));
         if (realSlots < 5) canLeave = `<span class="warning-text">無法填假</span>`;
 
@@ -191,7 +199,8 @@ function renderTable(year, month, data) {
         staffNames.forEach((name, i) => {
             if(name) {
                 const val = rowData['s'+i] || '';
-                html += `<td class="cell ${getStatusClass(val)}"><div class="editable-content" onclick="showQuickMenu(event, this)">${val}</div></td>`;
+                // 這裡保留 contenteditable 並綁定手動輸入事件
+                html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" oncontextmenu="onCellClick(event, this); return false;" onclick="if(window.innerWidth<768) onCellClick(event, this)" onblur="handleManualInput(this)">${val}</div></td>`;
             }
         });
 
@@ -216,8 +225,8 @@ function renderTable(year, month, data) {
 function getStatusClass(v) {
     if (v.includes("休假")) return "status-holiday";
     if (v.includes("換休")) return "status-exchange";
-    if (v === "月補") return "status-monthly";
-    if (v === "公假A1") return "status-official";
+    if (v.includes("月補")) return "status-monthly";
+    if (v.includes("公假")) return "status-official";
     return "";
 }
 
@@ -233,7 +242,6 @@ function saveDayDeduct(day, val) {
 
 function saveRowData(day) {
     const picker = document.getElementById('monthPicker').value;
-    if(!picker) return;
     const [year, month] = picker.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
     if(!row) return;
@@ -262,15 +270,10 @@ function exportToExcel() {
     XLSX.writeFile(wb, `四湖預定表_${document.getElementById('monthPicker').value}.xlsx`);
 }
 
-// 修改處：網頁載入自動設為下個月
 (function(){
     const now = new Date();
-    // 設定到下個月的第一天
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const year = nextMonth.getFullYear();
-    const month = String(nextMonth.getMonth() + 1).padStart(2, '0');
-    
-    document.getElementById('monthPicker').value = `${year}-${month}`;
+    document.getElementById('monthPicker').value = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
     initTable();
 })();
 </script>
