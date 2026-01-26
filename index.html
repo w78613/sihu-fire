@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - V序號完全修正版</title>
+    <title>四湖分隊雲端預定表 - V序號最終修正版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -165,6 +165,7 @@ function handleManualInput(cell) {
     saveRowData(tr.dataset.day);
 }
 
+// 核心修正：確保假日 V 序號顯示
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
@@ -184,25 +185,23 @@ function applyDutyCycle() {
                     const cycle = diffDays % 4;
                     const isOffDay = (cycle === 0 || cycle === 1);
                     
+                    // 1. 先決定該人領到的 V 序號
+                    let assignedV = "";
                     if (isOffDay) {
-                        let finalLabel = (vCounter <= 9) ? `V${vCounter}` : "休假";
-                        
-                        // 關鍵修正點：判斷是否為「長期受訓」且為「平日」
-                        // 只有同時符合這兩個條件才顯示公假A1，否則一律顯示領到的 V 序號
-                        if (s.isTraining && dayIdx >= 1 && dayIdx <= 5) {
-                            updates[`${d}/s${i}`] = "公假A1";
-                        } else {
-                            updates[`${d}/s${i}`] = finalLabel;
-                        }
-                        
-                        vCounter++; // 不論最後顯示什麼，只要是放假的人，計數器就前進
+                        assignedV = (vCounter <= 9) ? `V${vCounter}` : "休假";
+                        vCounter++;
+                    }
+
+                    // 2. 決定最後要在表格顯示什麼
+                    if (s.isTraining && dayIdx >= 1 && dayIdx <= 5) {
+                        // 平日受訓：不論有沒有 V 序號，一律顯示公假A1
+                        updates[`${d}/s${i}`] = "公假A1";
+                    } else if (isOffDay) {
+                        // 假日或是非受訓人員：顯示領到的 V 序號
+                        updates[`${d}/s${i}`] = assignedV;
                     } else {
-                        // 上班日邏輯：受訓人員平日依然是公假A1，其餘為空白
-                        if (s.isTraining && dayIdx >= 1 && dayIdx <= 5) {
-                            updates[`${d}/s${i}`] = "公假A1";
-                        } else {
-                            updates[`${d}/s${i}`] = ""; 
-                        }
+                        // 其餘情況（上班日）：清空內容
+                        updates[`${d}/s${i}`] = "";
                     }
                 }
             }
