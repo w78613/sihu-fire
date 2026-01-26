@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 完整修正優化版</title>
+    <title>四湖分隊雲端預定表 - 精準清除版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -60,7 +60,8 @@
         .warning-text { color: red; font-size: 11px; font-weight: bold; }
 
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
-        #staffModal { display: none; position: fixed; top: 15%; left: 50%; transform: translateX(-50%); width: 85%; max-width: 600px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; }
+        #staffModal { display: none; position: fixed; top: 10%; left: 50%; transform: translateX(-50%); width: 90%; max-width: 600px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 80vh; overflow-y: auto; }
+        .modal-footer { margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ccc; display: flex; flex-direction: column; gap: 10px; }
     </style>
 </head>
 <body>
@@ -80,7 +81,12 @@
 <div id="staffModal">
     <h3 style="margin-top:0;">👥 隊員名單設定</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap:10px;"></div>
-    <button class="btn" style="background: #0984e3; width: 100%; margin-top:10px;" onclick="saveStaffNames()">✅ 儲存</button>
+    
+    <div class="modal-footer">
+        <button class="btn" style="background: #0984e3; width: 100%;" onclick="saveStaffNames()">✅ 儲存名單變更</button>
+        <button class="btn" style="background: #d63031; width: 100%; margin-top: 20px; opacity: 0.8;" onclick="clearCurrentMonth()">🧹 僅清除假別與備註</button>
+        <p style="font-size: 11px; color: #666; text-align: center; margin: 0;">(保留：填假順序、預扣天數、統計公式)</p>
+    </div>
 </div>
 
 <script>
@@ -100,6 +106,23 @@ function selectAllText(element) {
         selection.removeAllRanges();
         selection.addRange(range);
     }, 1);
+}
+
+// 修改處：精準清除邏輯，僅刪除 content (假別與備註)
+function clearCurrentMonth() {
+    const picker = document.getElementById('monthPicker').value;
+    if(!picker) return;
+    const [year, month] = picker.split('-');
+    
+    if (confirm(`⚠️ 確定要清空 ${year}年${month}月 的假別與備註嗎？\n(順序、預扣天數、統計格數將會保留)`)) {
+        // 只移除 content 路徑下的數據，settings 路徑 (順序、預扣) 會保留
+        db.ref(`duty_system/${year}_${month}/content`).remove()
+          .then(() => {
+              alert("✅ 假別內容已清空。");
+              closeAllModals();
+          })
+          .catch((err) => alert("清除失敗：" + err));
+    }
 }
 
 function handlePaste(e, cell) {
@@ -242,6 +265,7 @@ function saveDayDeduct(day, val) {
 
 function saveRowData(day) {
     const picker = document.getElementById('monthPicker').value;
+    if(!picker) return;
     const [year, month] = picker.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
     if(!row) return;
@@ -262,7 +286,10 @@ function toggleStaffModal() {
 function saveStaffNames() {
     const newNames = [];
     for (let i = 0; i < 18; i++) newNames.push(document.getElementById(`staffInput${i}`).value.trim());
-    db.ref(`duty_system/global/staffNames`).set(newNames).then(() => closeAllModals());
+    db.ref(`duty_system/global/staffNames`).set(newNames).then(() => {
+        alert("名單已更新");
+        closeAllModals();
+    });
 }
 
 function exportToExcel() {
