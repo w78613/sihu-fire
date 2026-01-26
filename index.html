@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 自動下月版</title>
+    <title>四湖分隊雲端預定表 - 長期受訓版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -35,10 +35,7 @@
         .col-date-fixed { position: sticky; left: 0; z-index: 91; background: white; border-right: 1px solid #333; width: 45px; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; background: white; border-right: 2px solid #333 !important; width: 45px; }
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
-        
-        /* 公假A1 顏色設定 */
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
-
         .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
         .order-row { background: #f1f8e9; font-weight: bold; border-top: 2px solid #333; }
         .warning-text { color: red; font-size: 11px; font-weight: bold; }
@@ -63,7 +60,7 @@
 
 <div class="modal-overlay" id="modalOverlay" onclick="closeAllModals()"></div>
 <div id="staffModal">
-    <h3>👥 名單與起始日設定</h3>
+    <h3>👥 名單與起始日設定 (勾選受訓者一至五帶A1)</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;"></div>
     <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ccc;">
         <button class="btn" style="background: #0984e3; width: 100%; margin-bottom: 10px;" onclick="saveStaffData()">✅ 儲存設定</button>
@@ -106,9 +103,7 @@ function renderTable(year, month, data) {
     html += `<th>備註</th><th style="min-width:60px;">可填</th>`;
     
     if (isStatsVisible) {
-        html += `<th style="background:#eee!important;">預計</th>
-                 <th style="background:#eee!important;">預扣</th>
-                 <th style="background:#eee!important;">真實</th>`;
+        html += `<th style="background:#eee!important;">預計</th><th style="background:#eee!important;">預扣</th><th style="background:#eee!important;">真實</th>`;
     }
     html += `</tr></thead><tbody>`;
 
@@ -137,20 +132,15 @@ function renderTable(year, month, data) {
             }
         });
 
-        html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td>
-                 <td>${canLeave}</td>`;
+        html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td><td>${canLeave}</td>`;
         if (isStatsVisible) {
-            html += `<td>${emptyCount}</td>
-                     <td><input type="number" style="width:100%; border:none; text-align:center;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
-                     <td>${realSlots}</td>`;
+            html += `<td>${emptyCount}</td><td><input type="number" style="width:100%; border:none; text-align:center;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td><td>${realSlots}</td>`;
         }
         html += `</tr>`;
     }
 
     html += `<tr class="order-row"><td colspan="2">填假順序</td>`;
-    staffData.forEach((s, i) => {
-        if(s.name) html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`;
-    });
+    staffData.forEach((s, i) => { if(s.name) html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`; });
     html += `<td colspan="${isStatsVisible ? 5 : 2}"></td></tr></tbody>`;
     document.getElementById('dutyTable').innerHTML = html;
 }
@@ -160,15 +150,13 @@ function handleManualInput(cell) {
     const val = cell.innerText.trim();
     if (val !== "") {
         let emptyCount = 0;
-        tr.querySelectorAll('.editable-content').forEach(el => {
-            if (el.innerText.trim() === "") emptyCount++;
-        });
+        tr.querySelectorAll('.editable-content').forEach(el => { if (el.innerText.trim() === "") emptyCount++; });
         const picker = document.getElementById('monthPicker').value;
         const [year, month] = picker.split('-');
         db.ref(`duty_system/${year}_${month}/settings/dayDeducts/${tr.dataset.day}`).once('value', (snap) => {
             const deduct = parseInt(snap.val() || 0);
             if ((emptyCount - deduct) < 5) {
-                alert("⚠️ 無法輸入！剩餘人力已達下限 (5人)。");
+                alert("⚠️ 人力已達下限 (5人)。");
                 cell.innerText = "";
                 saveRowData(tr.dataset.day);
             }
@@ -181,24 +169,30 @@ function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
     let updates = {};
-    if(!confirm(`將依照起始日帶入勤休文字（放假者依序填入V1-V9），是否繼續？`)) return;
+    if(!confirm(`將執行勤休帶入：\n1. 受訓者週一至五自動帶入「公假A1」\n2. 其餘時間及人員依起始日排入V1-V9`)) return;
 
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
+        const dayIdx = currentDate.getDay(); // 0是週日, 1-5是週一至五, 6是週六
         let vCounter = 1; 
         
         staffData.forEach((s, i) => {
             if(s.name && s.startDate) {
-                const start = new Date(s.startDate);
-                const diffDays = Math.floor((currentDate - start) / 86400000);
-                if (diffDays >= 0) {
-                    const cycle = diffDays % 4;
-                    if (cycle === 0 || cycle === 1) { 
-                        const label = (vCounter <= 9) ? `V${vCounter}` : "休假";
-                        updates[`${d}/s${i}`] = label;
-                        vCounter++;
-                    } else {
-                        updates[`${d}/s${i}`] = ""; 
+                // 特殊判斷：長期受訓人員在週一至五
+                if (s.isTraining && dayIdx >= 1 && dayIdx <= 5) {
+                    updates[`${d}/s${i}`] = "公假A1";
+                } else {
+                    // 一般勤二休二邏輯
+                    const start = new Date(s.startDate);
+                    const diffDays = Math.floor((currentDate - start) / 86400000);
+                    if (diffDays >= 0) {
+                        const cycle = diffDays % 4;
+                        if (cycle === 0 || cycle === 1) { 
+                            updates[`${d}/s${i}`] = (vCounter <= 9) ? `V${vCounter}` : "休假";
+                            vCounter++;
+                        } else {
+                            updates[`${d}/s${i}`] = ""; 
+                        }
                     }
                 }
             }
@@ -227,11 +221,14 @@ function saveDayDeduct(day, val) {
 
 function toggleStaffModal() {
     document.getElementById('staffInputs').innerHTML = Array.from({length:18}).map((_, i) => {
-        const s = staffData[i] || { name: '', startDate: '' };
+        const s = staffData[i] || { name: '', startDate: '', isTraining: false };
         return `<div class="staff-input-group">
             <div style="font-weight:bold;">人員 ${i+1}</div>
             <input type="text" placeholder="姓名" value="${s.name}" id="name${i}">
             <input type="date" value="${s.startDate || ''}" id="date${i}">
+            <label style="font-size:12px; color:#d35400;">
+                <input type="checkbox" id="train${i}" ${s.isTraining ? 'checked' : ''}> 長期受訓 (一~五A1)
+            </label>
         </div>`;
     }).join('');
     document.getElementById('staffModal').style.display = 'block';
@@ -243,7 +240,8 @@ function saveStaffData() {
     for (let i = 0; i < 18; i++) {
         newData.push({
             name: document.getElementById(`name${i}`).value.trim(),
-            startDate: document.getElementById(`date${i}`).value
+            startDate: document.getElementById(`date${i}`).value,
+            isTraining: document.getElementById(`train${i}`).checked
         });
     }
     db.ref(`duty_system/global/staffData`).set(newData).then(() => { alert("設定儲存成功"); closeAllModals(); });
@@ -257,13 +255,9 @@ function clearCurrentMonth() {
 function exportToExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("dutyTable")), `四湖預定表.xlsx`); }
 
 (function(){
-    // 修改為預設顯示「下個月」
     const now = new Date();
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const y = nextMonth.getFullYear();
-    const m = String(nextMonth.getMonth() + 1).padStart(2, '0');
-    
-    document.getElementById('monthPicker').value = `${y}-${m}`;
+    document.getElementById('monthPicker').value = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth()+1).padStart(2,'0')}`;
     initTable();
 })();
 </script>
