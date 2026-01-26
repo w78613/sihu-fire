@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 純手動輸入版</title>
+    <title>四湖分隊雲端預定表 - 手動輸入版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -90,26 +90,25 @@ function closeAllModals() {
     document.getElementById('modalOverlay').style.display = 'none';
 }
 
-function checkManpower(cell, newVal) {
-    const tr = cell.closest('tr');
-    let emptyCount = 0;
-    tr.querySelectorAll('.cell .editable-content').forEach(el => {
-        const text = (el === cell) ? newVal.trim() : el.innerText.trim();
-        if (text === "") emptyCount++;
-    });
-    const deduct = parseInt(tr.querySelector('.deduct-input')?.value || 0);
-    return (emptyCount - deduct);
-}
-
-// 處理手動輸入後的邏輯
+// 修改處：手動輸入後的邏輯檢核與存檔
 function handleManualInput(cell) {
+    const tr = cell.closest('tr');
+    const day = tr.dataset.day;
     const val = cell.innerText.trim();
-    const day = cell.closest('tr').dataset.day;
-    
-    // 如果輸入內容導致人力小於 5，則警告並還原（這裡簡單處理為清空，或您可以按需求調整）
-    if (val !== "" && checkManpower(cell, val) < 5) {
-        alert("⚠️ 無法輸入！該日剩餘人力已達下限 (5人)。");
-        cell.innerText = ""; 
+
+    // 人力防呆
+    if (val !== "") {
+        let emptyCount = 0;
+        tr.querySelectorAll('.cell .editable-content').forEach(el => {
+            if (el.innerText.trim() === "") emptyCount++;
+        });
+        const deduct = parseInt(tr.querySelector('.deduct-input')?.value || 0);
+        const realSlots = emptyCount - deduct;
+        
+        if (realSlots < 5) {
+            alert("⚠️ 無法輸入內容！\n該日剩餘人力已達下限 (5人)，內容將恢復空白。");
+            cell.innerText = ""; 
+        }
     }
     
     saveRowData(day);
@@ -157,6 +156,7 @@ function renderTable(year, month, data) {
         staffNames.forEach((name, i) => { if (name && !(rowData['s'+i] || "").trim()) emptyCount++; });
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyCount - deduct;
+        
         let canLeave = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : ""));
         if (realSlots < 5) canLeave = `<span class="warning-text">無法填假</span>`;
 
@@ -167,7 +167,7 @@ function renderTable(year, month, data) {
         staffNames.forEach((name, i) => {
             if(name) {
                 const val = rowData['s'+i] || '';
-                // 移除所有 click 彈出選單的事件，僅保留手動輸入與失去焦點存檔
+                // 修改處：直接給予 contenteditable 權限，並綁定失去焦點存檔 handleManualInput
                 html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" onblur="handleManualInput(this)">${val}</div></td>`;
             }
         });
@@ -199,17 +199,54 @@ function getStatusClass(v) {
 }
 
 function saveOrderData(idx, val) {
-    const picker = document.getElementById('monthPicker').value;
-    if(!picker) return;
-    const [year, month] = picker.split('-');
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
     db.ref(`duty_system/${year}_${month}/settings/orderData`).update({ ['s'+idx]: val });
 }
 
 function saveDayDeduct(day, val) {
-    const picker = document.getElementById('monthPicker').value;
-    if(!picker) return;
-    const [year, month] = picker.split('-');
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
     db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
 }
 
-function saveRow
+function saveRowData(day) {
+    const picker = document.getElementById('monthPicker').value;
+    if(!picker) return;
+    const [year, month] = picker.split('-');
+    const row = document.querySelector(`tr[data-day="${day}"]`);
+    if(!row) return;
+    const rowObj = { note: row.querySelector('.note-cell').innerText };
+    row.querySelectorAll('.cell .editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
+    db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
+}
+
+function toggleStaffModal() {
+    const modal = document.getElementById('staffModal');
+    document.getElementById('staffInputs').innerHTML = Array.from({length:18}).map((_, i) => 
+        `<div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:75%;"></div>`
+    ).join('');
+    modal.style.display = 'block';
+    document.getElementById('modalOverlay').style.display = 'block';
+}
+
+function saveStaffNames() {
+    const newNames = [];
+    for (let i = 0; i < 18; i++) newNames.push(document.getElementById(`staffInput${i}`).value.trim());
+    db.ref(`duty_system/global/staffNames`).set(newNames).then(() => closeAllModals());
+}
+
+function exportToExcel() {
+    const wb = XLSX.utils.table_to_book(document.getElementById("dutyTable"));
+    XLSX.writeFile(wb, `四湖預定表_${document.getElementById('monthPicker').value}.xlsx`);
+}
+
+(function(){
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const year = nextMonth.getFullYear();
+    const month = String(nextMonth.getMonth() + 1).padStart(2, '0');
+    document.getElementById('monthPicker').value = `${year}-${month}`;
+    initTable();
+})();
+</script>
+</body>
+</html>
