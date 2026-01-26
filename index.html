@@ -30,46 +30,70 @@
             --saturday-orange: #fff5e6;
             --holiday-green: #d4edda;
             --exchange-orange: #ffeeba;
+            --monthly-blue: #bee5eb;
+            --official-red: #f8d7da;
         }
         body { font-family: "Microsoft JhengHei", sans-serif; margin: 5px; background: #f4f7f6; }
+        .title-area { text-align: center; margin-bottom: 5px; }
         .controls { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         
-        .table-container { overflow: auto; max-height: 80vh; border: 2px solid #333; position: relative; }
+        /* 核心凍結窗格結構 */
+        .table-container { 
+            overflow: auto; 
+            max-height: 80vh; 
+            max-width: 100vw;
+            border: 2px solid #333;
+            position: relative;
+        }
         table { border-collapse: separate; border-spacing: 0; width: 100%; background: white; table-layout: fixed; }
-        th, td { border: 0.5px solid #666; text-align: center; padding: 2px; font-size: 14px; height: 50px; box-sizing: border-box; }
+        th, td { border: 0.5px solid #666; text-align: center; padding: 2px; font-size: 14px; height: 50px; position: relative; box-sizing: border-box; }
         
-        /* 凍結窗格 */
+        /* 1. 頂部凍結 */
         thead th { position: sticky; top: 0; z-index: 100; background: var(--header-blue); }
-        .col-date-fixed { position: sticky; left: 0; z-index: 90; width: 45px; background: #fff; border-right: 1px solid #666; }
-        .col-week-fixed { position: sticky; left: 45px; z-index: 90; width: 45px; background: #fff; border-right: 2px solid #333 !important; }
+        
+        /* 2. 左側兩欄凍結 (日期+星期) */
+        .col-date-fixed { position: sticky; left: 0; z-index: 90; width: 45px; min-width: 45px; border-right: 1px solid #666; }
+        .col-week-fixed { position: sticky; left: 45px; z-index: 90; width: 45px; min-width: 45px; border-right: 2px solid #333 !important; }
+        
+        /* 3. 左上角交叉點 */
         thead th.col-date-fixed, thead th.col-week-fixed { z-index: 110; background: var(--header-blue); }
 
         .col-staff { width: 85px; min-width: 85px; font-weight: bold; }
+        .col-note { width: 150px; min-width: 150px; }
+
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; font-weight: bold; font-size: 16px; }
 
-        /* 統計與按鈕 */
-        .stats-row { background: #f8f9fa; font-weight: bold; }
-        .hidden-stats { display: none; }
-        .warning-text { color: red; font-weight: bold; font-size: 12px; }
-        .btn { padding: 6px 12px; font-size: 13px; border-radius: 4px; border: none; background: #6c757d; color: white; cursor: pointer; }
-        .input-small { width: 40px; text-align: center; }
-
-        /* 狀態顏色 */
-        .status-holiday { background-color: var(--holiday-green) !important; }
-        .status-exchange { background-color: var(--exchange-orange) !important; }
-
-        /* 快選選單 */
-        .quick-menu { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.95); z-index: 150; flex-direction: column; }
+        /* 手機選單功能 */
+        .quick-menu { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.98); z-index: 150; flex-direction: column; border: 1px solid #007bff; }
         .cell:focus-within .quick-menu { display: flex; }
-        .quick-btn { flex: 1; font-size: 11px; border: none; background: transparent; border-bottom: 1px solid #eee; cursor: pointer; font-weight: bold; }
+        .quick-btn { flex: 1; padding: 0; font-size: 12px; cursor: pointer; border: none; background: transparent; border-bottom: 1px solid #eee; font-weight: bold; }
+
+        .status-holiday { background-color: var(--holiday-green) !important; } 
+        .status-exchange { background-color: var(--exchange-orange) !important; } 
+        .status-monthly { background-color: var(--monthly-blue) !important; } 
+        .status-official { background-color: var(--official-red) !important; } 
+        
+        /* 統計列樣式 (對應圖片2) */
+        .stats-row { background: #eee; font-weight: bold; font-size: 12px; }
+        .stats-title { background: #ccc !important; }
+
+        .btn { padding: 6px 12px; font-size: 13px; border-radius: 4px; border: none; background: #6c757d; color: white; font-weight: bold; }
+        .order-input { width: 80px; padding: 5px; border: 1px solid #ccc; }
     </style>
 </head>
 <body>
 
+<div class="title-area">
+    <div id="displayDate" style="font-size: 20px; font-weight: bold;"><span id="yearVal"></span>年<span id="monthVal"></span>月 預定表</div>
+</div>
+
 <div class="controls">
     <input type="month" id="monthPicker" onchange="initTable()">
-    <button class="btn" onclick="toggleStaffModal()">👥 名單編輯</button>
-    <button class="btn" id="toggleStatsBtn" onclick="toggleStatsVisibility()" style="background:#28a745;">📊 顯示詳細計算</button>
+    <button class="btn" onclick="toggleStaffModal()">👥 名單</button>
+    <div style="font-size: 12px;">
+        A:<input type="text" id="seqA" class="order-input" oninput="saveSettings()">
+        B:<input type="text" id="seqB" class="order-input" oninput="saveSettings()">
+    </div>
 </div>
 
 <div class="table-container">
@@ -78,21 +102,15 @@
 
 <div id="staffModal" style="display:none; position:fixed; top:5%; left:5%; width:90%; height:90%; background:white; border:2px solid #333; padding:15px; z-index:2000; border-radius:8px;">
     <h3>名單管理</h3>
-    <div id="staffInputs" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; max-height:70%; overflow-y:auto;"></div>
+    <div id="staffInputs" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; max-height:70%; overflow-y:auto; padding:5px;"></div>
     <hr>
-    <button class="btn" onclick="saveStaffNames()" style="background:#007bff; width:100%; height:45px;">儲存並更新</button>
+    <button class="btn" onclick="saveStaffNames()" style="background:#007bff; width:100%; height:45px;">儲存更新</button>
     <button class="btn" onclick="toggleStaffModal()" style="background:#bbb; width:100%; height:45px; margin-top:5px;">關閉</button>
 </div>
 
 <script>
 let staffNames = [];
-let isStatsVisible = false;
 const quickOptions = ["休假1", "休假2", "換休1", "換休2", "月補", "公假A1"];
-
-function toggleStatsVisibility() {
-    isStatsVisible = !isStatsVisible;
-    initTable(); // 重新渲染表格以套用顯示隱藏
-}
 
 function setInitialMonth() {
     const now = new Date();
@@ -101,12 +119,22 @@ function setInitialMonth() {
     initTable();
 }
 
+function saveSettings() {
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    db.ref(`duty_system/${year}_${month}/settings`).update({
+        seqA: document.getElementById('seqA').value,
+        seqB: document.getElementById('seqB').value
+    });
+}
+
 function toggleStaffModal() {
     const modal = document.getElementById('staffModal');
     if (modal.style.display === 'block') { modal.style.display = 'none'; } 
     else {
         const container = document.getElementById('staffInputs');
-        container.innerHTML = Array.from({length:18}).map((_, i) => `<div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:70%;"></div>`).join('');
+        container.innerHTML = Array.from({length:18}).map((_, i) => `
+            <div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:70%;"></div>
+        `).join('');
         modal.style.display = 'block';
     }
 }
@@ -119,125 +147,98 @@ function saveStaffNames() {
 
 function initTable() {
     const [year, month] = document.getElementById('monthPicker').value.split('-');
-    document.getElementById('toggleStatsBtn').innerText = isStatsVisible ? "收起計算細節" : "📊 顯示詳細計算";
+    document.getElementById('yearVal').innerText = year;
+    document.getElementById('monthVal').innerText = parseInt(month);
     
     db.ref(`duty_system/global/staffNames`).on('value', (snap) => {
-        staffNames = snap.val() || [];
+        staffNames = snap.val() || [""];
         db.ref(`duty_system/${year}_${month}`).on('value', (snapshot) => {
-            renderTable(year, month, snapshot.val() || {});
+            const data = snapshot.val() || {};
+            renderTable(year, month, data.content || {}, data.settings || {});
         });
     });
 }
 
-function renderTable(year, month, data) {
-    const savedData = data.content || {};
-    const settings = data.settings || {};
-    const deductValues = settings.deducts || {};
+function renderTable(year, month, savedData, settings) {
+    document.getElementById('seqA').value = settings.seqA || "";
+    document.getElementById('seqB').value = settings.seqB || "";
+    
     const daysInMonth = new Date(year, month, 0).getDate();
     
-    // 建立表頭
-    let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
-    staffNames.forEach(name => { if(name) html += `<th class="col-staff">${name}</th>`; });
-    html += `<th style="width:120px;">備註</th></tr></thead><tbody>`;
+    // 表頭 (對應圖片1：日期、星期、人名)
+    let html = `<thead><tr>
+            <th class="col-date-fixed">日期</th>
+            <th class="col-week-fixed">星期</th>
+            ${staffNames.map((name, i) => name ? `<th class="col-staff">${name}</th>` : '').join('')}
+            <th class="col-note">備註</th>
+        </tr></thead><tbody>`;
 
-    // 計算每人數據 (依照你的公式)
-    const stats = staffNames.map((name, i) => {
-        if (!name) return null;
-        let emptyCount = 0;
-        for (let d = 1; d <= daysInMonth; d++) {
-            const cellVal = (savedData[d] && savedData[d]['s'+i]) ? savedData[d]['s'+i].trim() : "";
-            if (cellVal === "") emptyCount++;
-        }
-        const deduct = parseInt(deductValues['s'+i] || 0);
-        const realSlots = emptyCount - deduct;
-        let canLeave = "0";
-        if (realSlots >= 7) canLeave = "2";
-        else if (realSlots === 6) canLeave = "1";
-        else if (realSlots === 5) canLeave = "0";
-        else if (realSlots <= 4) canLeave = "無法填假";
-        
-        return { emptyCount, deduct, realSlots, canLeave };
+    // 統計列 (對應圖片2：預計格數等)
+    const statsRows = [
+        { title: "可填假", key: "can_leave" },
+        { title: "預計格數", key: "est_slots" },
+        { title: "預扣天數", key: "deduct_days" },
+        { title: "真實格子總數", key: "total_slots" }
+    ];
+
+    statsRows.forEach(stat => {
+        html += `<tr class="stats-row">
+            <td class="col-date-fixed stats-title" colspan="2">${stat.title}</td>
+            ${staffNames.map((name, i) => name ? `<td>0</td>` : '').join('')}
+            <td></td>
+        </tr>`;
     });
 
-    // 1. 可填假列 (始終顯示)
-    html += `<tr class="stats-row"><td colspan="2" style="background:#ccc">可填假</td>`;
-    stats.forEach(s => { 
-        if(s) html += `<td class="${s.canLeave==='無法填假'?'warning-text':''}">${s.canLeave}</td>`; 
-    });
-    html += `<td></td></tr>`;
-
-    // 2. 詳細列 (受按鈕控制)
-    if (isStatsVisible) {
-        const rows = [
-            { t: "預計格數", k: "emptyCount" },
-            { t: "預扣天數", k: "deduct", input: true },
-            { t: "真實格子總數", k: "realSlots" }
-        ];
-        rows.forEach(rowInfo => {
-            html += `<tr class="stats-row"><td colspan="2">${rowInfo.t}</td>`;
-            stats.forEach((s, i) => {
-                if(s) {
-                    html += rowInfo.input ? 
-                        `<td><input type="number" class="input-small" value="${s.deduct}" onchange="saveDeduct(${i}, this.value)"></td>` : 
-                        `<td>${s[rowInfo.k]}</td>`;
-                }
-            });
-            html += `<td></td></tr>`;
-        });
-    }
-
-    // 3. 日期列
+    // 日期資料列
     for (let d = 1; d <= daysInMonth; d++) {
         const date = new Date(year, month - 1, d);
         const dayIdx = date.getDay();
         const rowData = savedData[d] || {};
-        const isSun = (dayIdx === 0), isSat = (dayIdx === 6);
-        
+        const isSun = (dayIdx === 0);
+        const isSat = (dayIdx === 6);
+
         html += `<tr data-day="${d}">
             <td class="col-date-fixed" style="background:${isSun?'var(--sunday-red)':(isSat?'var(--saturday-orange)':'#fff')}">${d}</td>
-            <td class="col-week-fixed" style="background:${isSun?'var(--sunday-red)':(isSat?'var(--saturday-orange)':'#fff')}">${["日","一","二","三","四","五","六"][dayIdx]}</td>`;
-        
-        staffNames.forEach((name, i) => {
-            if(name) {
-                html += `<td class="cell">
+            <td class="col-week-fixed" style="background:${isSun?'var(--sunday-red)':(isSat?'var(--saturday-orange)':'#fff')}">${["日","一","二","三","四","五","六"][dayIdx]}</td>
+            ${staffNames.map((name, i) => name ? `
+                <td class="cell">
                     <div contenteditable="true" class="editable-content" onblur="saveRowData(${d})">${rowData['s'+i] || ''}</div>
                     <div class="quick-menu">
-                        ${quickOptions.map(opt => `<button class="quick-btn" onclick="quickFill(this,'${opt}',${d})">${opt}</button>`).join('')}
-                        <button class="quick-btn" style="color:red" onclick="quickFill(this,'',${d})">清</button>
-                    </div></td>`;
-            }
-        });
-        html += `<td contenteditable="true" class="note-cell" onblur="saveRowData(${d})">${rowData.note || ''}</td></tr>`;
+                        ${quickOptions.map(opt => `<button class="quick-btn" onclick="quickFill(this, '${opt}', ${d})">${opt}</button>`).join('')}
+                        <button class="quick-btn" style="color:red" onclick="quickFill(this, '', ${d})">清除</button>
+                    </div>
+                </td>` : '').join('')}
+            <td contenteditable="true" class="note-cell" style="text-align:left;" onblur="saveRowData(${d})">${rowData.note || ''}</td>
+        </tr>`;
     }
-
     document.getElementById('dutyTable').innerHTML = html;
     document.querySelectorAll('.editable-content').forEach(updateCellStyle);
 }
 
-function saveDeduct(staffIdx, val) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
-    db.ref(`duty_system/${year}_${month}/settings/deducts`).update({ ['s'+staffIdx]: val });
+function quickFill(btn, text, day) {
+    const edit = btn.closest('td').querySelector('.editable-content');
+    edit.innerText = text;
+    updateCellStyle(edit);
+    saveRowData(day);
+}
+
+function updateCellStyle(el) {
+    const cell = el.parentElement;
+    const val = el.innerText.trim();
+    cell.classList.remove("status-holiday", "status-exchange", "status-monthly", "status-official");
+    if (val.includes("休假")) cell.classList.add("status-holiday");
+    else if (val.includes("換休")) cell.classList.add("status-exchange");
+    else if (val === "月補") cell.classList.add("status-monthly");
+    else if (val === "公假A1") cell.classList.add("status-official");
 }
 
 function saveRowData(day) {
     const [year, month] = document.getElementById('monthPicker').value.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
-    if (!row) return;
+    if(!row) return;
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     row.querySelectorAll('.cell .editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
-}
-
-function quickFill(btn, text, day) {
-    const edit = btn.closest('td').querySelector('.editable-content');
-    edit.innerText = text; updateCellStyle(edit); saveRowData(day);
-}
-
-function updateCellStyle(el) {
-    const cell = el.parentElement; const val = el.innerText.trim();
-    cell.classList.remove("status-holiday", "status-exchange");
-    if (val.includes("休假")) cell.classList.add("status-holiday");
-    else if (val.includes("換休")) cell.classList.add("status-exchange");
 }
 
 setInitialMonth();
