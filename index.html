@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 支援複製貼上版</title>
+    <title>四湖分隊雲端預定表 - 選取優化版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -32,65 +32,58 @@
             --color-monthly: #c1e1f5;
             --color-official: #f8d7da;
         }
-        body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; background: #f8f9fa; }
+        body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
         .top-bar { display: flex; gap: 10px; padding: 10px; background: white; position: sticky; top: 0; z-index: 1000; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .table-container { overflow: auto; max-height: 88vh; padding: 10px; }
-        table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; }
-        th, td { border: 1px solid #ccc; text-align: center; font-size: 13px; height: 38px; min-width: 70px; box-sizing: border-box; }
+        .table-container { overflow: auto; max-height: 88vh; padding: 10px; -webkit-overflow-scrolling: touch; }
+        table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; table-layout: fixed; width: max-content; }
+        th, td { border: 1px solid #ccc; text-align: center; font-size: 14px; height: 45px; min-width: 80px; box-sizing: border-box; }
         
         thead th { position: sticky; top: 0; z-index: 100; background: var(--header-dark); color: white; }
-        .col-date-fixed { position: sticky; left: 0; z-index: 91; width: 45px; background: white; border-right: 1px solid #333; }
-        .col-week-fixed { position: sticky; left: 45px; z-index: 91; width: 45px; background: white; border-right: 2px solid #333 !important; }
+        .col-date-fixed { position: sticky; left: 0; z-index: 91; width: 45px !important; background: white; border-right: 1px solid #333; }
+        .col-week-fixed { position: sticky; left: 45px; z-index: 91; width: 45px !important; background: white; border-right: 2px solid #333 !important; }
         
-        .col-staff { width: 85px; font-weight: bold; }
-        .col-note { width: 130px; border-right: 2px solid #333; }
-        .col-stat { width: 85px; font-weight: bold; }
-        .stat-header { background: #bfbfbf !important; color: black !important; }
+        /* 優化：讓選取範圍充滿整格，並停用系統選單 */
+        .editable-content { 
+            width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; 
+            outline: none; min-height: 45px; cursor: text;
+            -webkit-user-select: text; user-select: text;
+        }
+        .editable-content:focus { background: #e3f2fd; box-shadow: inset 0 0 0 2px #2196f3; }
 
+        .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
         .status-holiday { background-color: var(--color-holiday) !important; }
         .status-exchange { background-color: var(--color-exchange) !important; }
         .status-monthly { background-color: var(--color-monthly) !important; }
         .status-official { background-color: var(--color-official) !important; }
-
-        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; }
-        .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
-        .order-row { background: #f1f8e9; font-weight: bold; border-top: 2px solid #333; }
-        .warning-text { color: red; font-size: 11px; font-weight: bold; }
-
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
-        #staffModal { display: none; position: fixed; top: 15%; left: 50%; transform: translateX(-50%); width: 85%; max-width: 600px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; }
     </style>
 </head>
 <body>
 
 <div class="top-bar">
-    <input type="month" id="monthPicker" onchange="initTable()">
+    <input type="month" id="monthPicker" onchange="initTable()" style="font-size: 16px;">
     <button class="btn" style="background: #636e72;" onclick="toggleStaffModal()">👥 名單</button>
-    <button class="btn" style="background: #27ae60;" id="toggleStatsBtn" onclick="toggleStatsVisibility()">📊 計算欄位</button>
-    <button class="btn" style="background: #0984e3;" onclick="exportToExcel()">📥 匯出 Excel</button>
+    <button class="btn" style="background: #0984e3;" onclick="exportToExcel()">📥 匯出</button>
 </div>
 
 <div class="table-container">
     <table id="dutyTable"></table>
 </div>
 
-<div class="modal-overlay" id="modalOverlay" onclick="closeAllModals()"></div>
-<div id="staffModal">
-    <h3 style="margin-top:0;">👥 隊員名單設定</h3>
-    <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap:10px;"></div>
-    <button class="btn" style="background: #0984e3; width: 100%; margin-top:10px;" onclick="saveStaffNames()">✅ 儲存</button>
-</div>
-
 <script>
 let staffNames = [];
 let isStatsVisible = false;
 
-function closeAllModals() {
-    document.getElementById('staffModal').style.display = 'none';
-    document.getElementById('modalOverlay').style.display = 'none';
+// 優化處：點擊自動全選文字，方便複製貼上
+function selectAllText(element) {
+    setTimeout(() => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }, 1);
 }
 
-// 修改處：處理貼上事件，支援多格貼上
 function handlePaste(e, cell) {
     e.preventDefault();
     const text = (e.clipboardData || window.clipboardData).getData('text');
@@ -99,10 +92,9 @@ function handlePaste(e, cell) {
     const td = cell.closest('td');
     const colIndex = Array.from(tr.cells).indexOf(td);
 
-    // 取得當前行及其後續行
     let currentRow = tr;
     for (let i = 0; i < rows.length; i++) {
-        if (!currentRow) break;
+        if (!currentRow || rows[i].trim() === "") continue;
         const columns = rows[i].split('\t');
         for (let j = 0; j < columns.length; j++) {
             const targetTd = currentRow.cells[colIndex + j];
@@ -110,11 +102,9 @@ function handlePaste(e, cell) {
             if (targetEdit) {
                 const val = columns[j].trim();
                 targetEdit.innerText = val;
-                // 更新顏色與檢核
                 targetTd.className = `cell ${getStatusClass(val)}`;
             }
         }
-        // 儲存該行並移動到下一行
         saveRowData(currentRow.dataset.day);
         currentRow = currentRow.nextElementSibling;
     }
@@ -122,30 +112,25 @@ function handlePaste(e, cell) {
 
 function handleManualInput(cell) {
     const tr = cell.closest('tr');
-    const day = tr.dataset.day;
     const val = cell.innerText.trim();
-    
-    // 更新顏色
     cell.closest('td').className = `cell ${getStatusClass(val)}`;
-
-    if (val !== "") {
-        let emptyCount = 0;
-        tr.querySelectorAll('.cell .editable-content').forEach(el => {
-            if (el.innerText.trim() === "") emptyCount++;
-        });
-        const deduct = parseInt(tr.querySelector('.deduct-input')?.value || 0);
-        if ((emptyCount - deduct) < 5) {
-            alert("⚠️ 剩餘人力低於下限！內容已還原。");
-            cell.innerText = "";
-            cell.closest('td').className = "cell";
-        }
+    
+    // 人力防呆
+    let emptyCount = 0;
+    tr.querySelectorAll('.cell .editable-content').forEach(el => {
+        if (el.innerText.trim() === "") emptyCount++;
+    });
+    const deduct = parseInt(tr.querySelector('.deduct-input')?.value || 0);
+    if ((emptyCount - deduct) < 5 && val !== "") {
+        alert("⚠️ 人力不足 5 人，內容將清除！");
+        cell.innerText = "";
+        cell.closest('td').className = "cell";
     }
-    saveRowData(day);
+    saveRowData(tr.dataset.day);
 }
 
 function initTable() {
     const pickerVal = document.getElementById('monthPicker').value;
-    if(!pickerVal) return;
     const [year, month] = pickerVal.split('-');
     db.ref(`duty_system/global/staffNames`).once('value', (snap) => {
         staffNames = snap.val() || [];
@@ -159,25 +144,17 @@ function renderTable(year, month, data) {
     const savedData = data.content || {};
     const settings = data.settings || {};
     const deductValues = settings.dayDeducts || {};
-    const orderData = settings.orderData || {};
     const daysInMonth = new Date(year, month, 0).getDate();
     
     let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
-    staffNames.forEach(name => { if(name) html += `<th class="col-staff">${name}</th>`; });
-    html += `<th class="col-note">備註</th><th class="col-stat stat-header">可填假</th>`;
-    if (isStatsVisible) html += `<th class="col-stat">預計</th><th class="col-stat">預扣</th><th class="col-stat">真實</th>`;
-    html += `</tr></thead><tbody>`;
+    staffNames.forEach(name => { if(name) html += `<th>${name}</th>`; });
+    html += `<th style="min-width:120px;">備註</th></tr></thead><tbody>`;
 
     for (let d = 1; d <= daysInMonth; d++) {
         const date = new Date(year, month - 1, d);
         const dayIdx = date.getDay();
         const rowData = savedData[d] || {};
         const isSun = (dayIdx === 0), isSat = (dayIdx === 6);
-        
-        let emptyCount = 0;
-        staffNames.forEach((name, i) => { if (name && !(rowData['s'+i] || "").trim()) emptyCount++; });
-        const realSlots = emptyCount - parseInt(deductValues[d] || 0);
-        let canLeave = realSlots >= 7 ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : "X"));
 
         html += `<tr data-day="${d}">
             <td class="col-date-fixed" style="color:${isSun?'red':(isSat?'#e67e22':'#333')}">${d}</td>
@@ -186,19 +163,12 @@ function renderTable(year, month, data) {
         staffNames.forEach((name, i) => {
             if(name) {
                 const val = rowData['s'+i] || '';
-                // 綁定 onpaste 事件
-                html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" onblur="handleManualInput(this)" onpaste="handlePaste(event, this)">${val}</div></td>`;
+                // 這裡加入 onclick="selectAllText(this)" 優化選取
+                html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" onclick="selectAllText(this)" onblur="handleManualInput(this)" onpaste="handlePaste(event, this)">${val}</div></td>`;
             }
         });
 
-        html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td>
-                 <td class="col-stat">${canLeave}</td>`;
-        if (isStatsVisible) {
-            html += `<td>${emptyCount}</td>
-                     <td><input type="number" class="deduct-input" style="width:100%;text-align:center;" value="${deductValues[d]||0}" onchange="saveDayDeduct(${d}, this.value)"></td>
-                     <td>${realSlots}</td>`;
-        }
-        html += `</tr>`;
+        html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td></tr>`;
     }
     document.getElementById('dutyTable').innerHTML = html;
 }
@@ -221,31 +191,9 @@ function saveRowData(day) {
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
 }
 
-function saveDayDeduct(day, val) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
-    db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
-}
-
-function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
-
-function toggleStaffModal() {
-    const modal = document.getElementById('staffModal');
-    document.getElementById('staffInputs').innerHTML = Array.from({length:18}).map((_, i) => 
-        `<div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:75%;"></div>`
-    ).join('');
-    modal.style.display = 'block';
-    document.getElementById('modalOverlay').style.display = 'block';
-}
-
-function saveStaffNames() {
-    const newNames = [];
-    for (let i = 0; i < 18; i++) newNames.push(document.getElementById(`staffInput${i}`).value.trim());
-    db.ref(`duty_system/global/staffNames`).set(newNames).then(() => closeAllModals());
-}
-
 function exportToExcel() {
     const wb = XLSX.utils.table_to_book(document.getElementById("dutyTable"));
-    XLSX.writeFile(wb, `四湖預定表_${document.getElementById('monthPicker').value}.xlsx`);
+    XLSX.writeFile(wb, `四湖預訂表_${document.getElementById('monthPicker').value}.xlsx`);
 }
 
 (function(){
