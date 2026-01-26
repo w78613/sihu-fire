@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 整合功能版</title>
+    <title>四湖分隊雲端預定表 - 簡化設定版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -63,7 +63,7 @@
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;"></div>
     <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ccc;">
         <button class="btn" style="background: #0984e3; width: 100%; margin-bottom: 10px;" onclick="saveStaffData()">✅ 儲存設定</button>
-        <button class="btn" style="background: #d63031; width: 100%; opacity: 0.8;" onclick="clearCurrentMonth()">🧹 清空本月假別內容</button>
+        <button class="btn" style="background: #d63031; width: 100%; opacity: 0.8;" onclick="clearCurrentMonth()">🧹 清空本月內容</button>
     </div>
 </div>
 
@@ -98,7 +98,12 @@ function renderTable(year, month, data) {
     const daysInMonth = new Date(year, month, 0).getDate();
     
     let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
-    staffData.forEach(s => { if(s.name) html += `<th>${s.name}<br><small>${s.vType || ''}</small></th>`; });
+    staffData.forEach((s, i) => { 
+        if(s.name) {
+            const vLabel = (i < 9) ? `V${i+1}` : '';
+            html += `<th>${s.name}<br><small>${vLabel}</small></th>`; 
+        }
+    });
     html += `<th>備註</th><th style="min-width:60px;">可填</th>`;
     
     if (isStatsVisible) {
@@ -176,17 +181,18 @@ function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
     let updates = {};
-    if(!confirm(`確定執行「勤休制度」自動帶入 V1-V9 文字嗎？`)) return;
+    if(!confirm(`將依照名單順序(前9人為V1-V9)帶入勤休文字，是否繼續？`)) return;
 
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
         staffData.forEach((s, i) => {
-            if(s.name && s.startDate && s.vType) {
+            if(s.name && s.startDate) {
                 const start = new Date(s.startDate);
                 const diffDays = Math.floor((currentDate - start) / 86400000);
                 if (diffDays >= 0) {
                     const cycle = diffDays % 4;
-                    updates[`${d}/s${i}`] = (cycle === 0 || cycle === 1) ? s.vType : "";
+                    const vLabel = (i < 9) ? `V${i+1}` : "休假"; // 前9位自動帶V，後面帶休假
+                    updates[`${d}/s${i}`] = (cycle === 0 || cycle === 1) ? vLabel : "";
                 }
             }
         });
@@ -195,8 +201,7 @@ function applyDutyCycle() {
 }
 
 function saveRowData(day) {
-    const picker = document.getElementById('monthPicker').value;
-    const [year, month] = picker.split('-');
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     row.querySelectorAll('.editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
@@ -214,14 +219,12 @@ function saveDayDeduct(day, val) {
 }
 
 function toggleStaffModal() {
-    let vOptions = `<option value="">無</option>`;
-    for(let k=1; k<=9; k++) vOptions += `<option value="V${k}">V${k}</option>`;
     document.getElementById('staffInputs').innerHTML = Array.from({length:18}).map((_, i) => {
-        const s = staffData[i] || { name: '', startDate: '', vType: '' };
+        const s = staffData[i] || { name: '', startDate: '' };
+        const vHint = (i < 9) ? `(對應 V${i+1})` : '';
         return `<div class="staff-input-group">
-            <div>人員 ${i+1}</div>
+            <div style="font-weight:bold;">人員 ${i+1} ${vHint}</div>
             <input type="text" placeholder="姓名" value="${s.name}" id="name${i}">
-            <select id="vType${i}">${vOptions.replace(`value="${s.vType}"`, `value="${s.vType}" selected`)}</select>
             <input type="date" value="${s.startDate || ''}" id="date${i}">
         </div>`;
     }).join('');
@@ -234,7 +237,6 @@ function saveStaffData() {
     for (let i = 0; i < 18; i++) {
         newData.push({
             name: document.getElementById(`name${i}`).value.trim(),
-            vType: document.getElementById(`vType${i}`).value,
             startDate: document.getElementById(`date${i}`).value
         });
     }
@@ -243,7 +245,7 @@ function saveStaffData() {
 
 function clearCurrentMonth() {
     const [year, month] = document.getElementById('monthPicker').value.split('-');
-    if (confirm("確定清空內容？(保留預扣與順序)")) db.ref(`duty_system/${year}_${month}/content`).remove();
+    if (confirm("確定清空內容？")) db.ref(`duty_system/${year}_${month}/content`).remove();
 }
 
 function exportToExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("dutyTable")), `四湖預定表.xlsx`); }
