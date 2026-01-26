@@ -33,64 +33,24 @@
             --monthly-blue: #bee5eb;
             --official-red: #f8d7da;
         }
-        body { font-family: "Microsoft JhengHei", sans-serif; margin: 5px; background: #f4f7f6; }
+        body { font-family: "Microsoft JhengHei", sans-serif; margin: 5px; background: #f4f7f6; overflow-x: hidden; }
         .title-area { text-align: center; margin-bottom: 5px; }
-        #displayDate { font-size: 20px; font-weight: bold; color: #333; }
+        #displayDate { font-size: 22px; font-weight: bold; color: #333; }
         .controls { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         
-        /* 核心凍結結構 */
-        .table-container { 
-            overflow: auto; 
-            max-height: 85vh; 
-            max-width: 100vw;
-            border: 2px solid #333;
-        }
-        table { border-collapse: separate; border-spacing: 0; width: 100%; background: white; table-layout: fixed; }
-        th, td { border: 0.5px solid #666; text-align: center; padding: 2px; font-size: 14px; height: 50px; position: relative; box-sizing: border-box; }
+        .table-container { overflow-x: auto; overflow-y: auto; max-height: 80vh; -webkit-overflow-scrolling: touch; }
+        table { border-collapse: collapse; width: 100%; background: white; table-layout: fixed; border: 2px solid #333; }
+        th, td { border: 1px solid #666; text-align: center; padding: 2px; font-size: 14px; height: 48px; position: relative; }
         
-        /* 1. 頂部人員名單凍結 */
-        thead th { 
-            position: sticky; 
-            top: 0; 
-            z-index: 100; 
-            background: var(--header-blue); 
-        }
+        thead th { position: sticky; top: 0; z-index: 10; background: var(--header-blue); }
+        .col-fixed { position: sticky; left: 0; z-index: 11; background: #fff !important; border-right: 2px solid #333 !important; width: 40px; }
+        .col-staff { width: 75px; min-width: 75px; }
         
-        /* 2. 左側日期與星期凍結 */
-        .col-date-fixed { 
-            position: sticky; 
-            left: 0; 
-            z-index: 90; 
-            background: #fff; 
-            width: 45px; 
-            min-width: 45px;
-            border-right: 1px solid #333;
-        }
-        .col-week-fixed { 
-            position: sticky; 
-            left: 45px; /* 接在日期後面 */
-            z-index: 90; 
-            background: #fff; 
-            width: 45px; 
-            min-width: 45px;
-            border-right: 2px solid #333 !important;
-        }
-        
-        /* 3. 左上角交集處凍結 (日期/星期 標題) */
-        thead th.col-date-fixed, thead th.col-week-fixed { 
-            z-index: 110; 
-            background: var(--header-blue); 
-        }
-
-        .col-staff { width: 80px; min-width: 80px; font-weight: bold; }
-        .col-note { width: 150px; min-width: 150px; }
-
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; font-weight: bold; font-size: 16px; }
 
-        /* 手機選單優化 */
-        .quick-menu { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.98); z-index: 150; flex-direction: column; border: 1px solid #007bff; }
+        .quick-menu { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.98); z-index: 100; flex-direction: column; border: 1px solid #007bff; }
         .cell:focus-within .quick-menu { display: flex; }
-        .quick-btn { flex: 1; padding: 0; font-size: 13px; cursor: pointer; border: none; background: transparent; border-bottom: 1px solid #eee; font-weight: bold; }
+        .quick-btn { flex: 1; padding: 0; font-size: 13px; cursor: pointer; border: none; background: transparent; border-bottom: 1px solid #eee; font-weight: bold; color: #333; }
 
         .status-holiday { background-color: var(--holiday-green) !important; } 
         .status-exchange { background-color: var(--exchange-orange) !important; } 
@@ -109,7 +69,7 @@
 
 <div class="controls">
     <input type="month" id="monthPicker" onchange="initTable()">
-    <button class="btn" onclick="toggleStaffModal()">👥 名單編輯</button>
+    <button class="btn" onclick="toggleStaffModal()">👥 名單</button>
     <div style="font-size: 12px;">
         A:<input type="text" id="seqA" class="order-input" oninput="saveSettings()">
         B:<input type="text" id="seqB" class="order-input" oninput="saveSettings()">
@@ -120,7 +80,7 @@
     <table id="dutyTable"></table>
 </div>
 
-<div id="staffModal" style="display:none; position:fixed; top:5%; left:5%; width:90%; height:90%; background:white; border:2px solid #333; padding:15px; z-index:2000; border-radius:8px; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
+<div id="staffModal" style="display:none; position:fixed; top:5%; left:5%; width:90%; height:90%; background:white; border:2px solid #333; padding:15px; z-index:2000; border-radius:8px;">
     <h3 style="margin:0 0 10px 0;">名單管理</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; max-height:70%; overflow-y:auto; padding:5px;"></div>
     <hr>
@@ -132,10 +92,16 @@
 let staffNames = [];
 const quickOptions = ["休假1", "休假2", "換休1", "換休2", "月補", "公假A1"];
 
+// --- 核心修改：自動設定為下個月 ---
 function setInitialMonth() {
     const now = new Date();
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    document.getElementById('monthPicker').value = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth()+1).padStart(2,'0')}`;
+    // 獲取下個月的日期物件
+    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const year = nextMonthDate.getFullYear();
+    const month = String(nextMonthDate.getMonth() + 1).padStart(2, '0');
+    
+    // 設定月份選擇器的值
+    document.getElementById('monthPicker').value = `${year}-${month}`;
     initTable();
 }
 
@@ -186,22 +152,19 @@ function renderTable(year, month, savedData, settings) {
     
     const daysInMonth = new Date(year, month, 0).getDate();
     let html = `<thead><tr class="header-row">
-            <th class="col-date-fixed">日期</th>
-            <th class="col-week-fixed">星期</th>
+            <th class="col-fixed">日</th>
             ${staffNames.map((name, i) => name ? `<th class="col-staff">${name}</th>` : '').join('')}
-            <th class="col-note">備註</th>
+            <th style="width:120px;">備註</th>
         </tr></thead><tbody>`;
 
     for (let d = 1; d <= daysInMonth; d++) {
         const date = new Date(year, month - 1, d);
         const dayIdx = date.getDay();
         const rowData = savedData[d] || {};
-        const isSun = (dayIdx === 0);
-        const isSat = (dayIdx === 6);
+        const isWE = (dayIdx === 0 || dayIdx === 6);
 
         html += `<tr data-day="${d}">
-            <td class="col-date-fixed" style="background:${isSun?'var(--sunday-red)':(isSat?'var(--saturday-orange)':'#fff')}">${d}</td>
-            <td class="col-week-fixed" style="background:${isSun?'var(--sunday-red)':(isSat?'var(--saturday-orange)':'#fff')}">${["日","一","二","三","四","五","六"][dayIdx]}</td>
+            <td class="col-fixed" style="background:${isWE?'#fff5f5':'#fff'}; color:${dayIdx===0?'#d00':(dayIdx===6?'#e67e22':'#333')}">${d}</td>
             ${staffNames.map((name, i) => name ? `
                 <td class="cell">
                     <div contenteditable="true" class="editable-content" onblur="saveRowData(${d})">${rowData['s'+i] || ''}</div>
@@ -210,11 +173,12 @@ function renderTable(year, month, savedData, settings) {
                         <button class="quick-btn" style="color:red" onclick="quickFill(this, '', ${d})">清除</button>
                     </div>
                 </td>` : '').join('')}
-            <td contenteditable="true" class="note-cell" style="text-align:left; font-size:12px;" onblur="saveRowData(${d})">${rowData.note || ''}</td>
+            <td contenteditable="true" style="text-align:left; font-size:12px;" onblur="saveRowData(${d})">${rowData.note || ''}</td>
         </tr>`;
     }
-    document.getElementById('dutyTable').innerHTML = html;
-    document.querySelectorAll('.editable-content').forEach(updateCellStyle);
+    const table = document.getElementById('dutyTable');
+    table.innerHTML = html;
+    table.querySelectorAll('.editable-content').forEach(updateCellStyle);
 }
 
 function quickFill(btn, text, day) {
@@ -237,12 +201,12 @@ function updateCellStyle(el) {
 function saveRowData(day) {
     const [year, month] = document.getElementById('monthPicker').value.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
-    if(!row) return;
-    const rowObj = { note: row.querySelector('.note-cell').innerText };
-    row.querySelectorAll('.cell .editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
+    const rowObj = { note: row.cells[row.cells.length-1].innerText };
+    row.querySelectorAll('.editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
 }
 
+// 執行
 setInitialMonth();
 </script>
 </body>
