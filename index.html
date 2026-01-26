@@ -48,8 +48,6 @@
 
         .col-staff { width: 75px; font-weight: bold; }
         .col-note { width: 120px; border-right: 2px solid #333; }
-        
-        /* 統計欄位樣式 */
         .col-stat { width: 70px; font-weight: bold; background: #fdfdfd; }
         .stat-header { background: #888 !important; color: white !important; }
 
@@ -59,6 +57,7 @@
         .status-official { background-color: var(--color-official) !important; }
 
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; }
+        .order-row { background: #f1f8e9; font-weight: bold; }
         .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
         .warning-text { color: red; font-size: 11px; }
     </style>
@@ -86,7 +85,6 @@ function initTable() {
     const picker = document.getElementById('monthPicker').value;
     if(!picker) return;
     const [year, month] = picker.split('-');
-    document.getElementById('toggleStatsBtn').innerText = isStatsVisible ? "隱藏計算" : "📊 顯示計算";
     
     db.ref(`duty_system/global/staffNames`).on('value', (snap) => {
         staffNames = snap.val() || [];
@@ -100,18 +98,14 @@ function renderTable(year, month, data) {
     const savedData = data.content || {};
     const settings = data.settings || {};
     const deductValues = settings.dayDeducts || {};
+    const orderData = settings.orderData || {}; // 存儲底部的填假順序
     const daysInMonth = new Date(year, month, 0).getDate();
     
-    // 表頭
     let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
     staffNames.forEach(name => { if(name) html += `<th class="col-staff">${name}</th>`; });
-    html += `<th class="col-note">備註</th>`;
-    // 依照片順序排列統計欄位
-    html += `<th class="col-stat stat-header">可填假</th>`;
+    html += `<th class="col-note">備註</th><th class="col-stat">可填假</th>`;
     if (isStatsVisible) {
-        html += `<th class="col-stat stat-header">預計格數</th>
-                 <th class="col-stat stat-header">預扣天數</th>
-                 <th class="col-stat stat-header">真實格子總數</th>`;
+        html += `<th class="col-stat">預計格數</th><th class="col-stat">預扣天數</th><th class="col-stat">真實總數</th>`;
     }
     html += `</tr></thead><tbody>`;
 
@@ -121,7 +115,6 @@ function renderTable(year, month, data) {
         const rowData = savedData[d] || {};
         const isSun = (dayIdx === 0), isSat = (dayIdx === 6);
         
-        // 橫向統計邏輯：計算當天 1-18 人的空白格數
         let emptyCount = 0;
         staffNames.forEach((name, i) => { if (name && !(rowData['s'+i] || "").trim()) emptyCount++; });
         const deduct = parseInt(deductValues[d] || 0);
@@ -140,7 +133,6 @@ function renderTable(year, month, data) {
             }
         });
 
-        // 備註與右側統計
         html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td>
                  <td class="col-stat">${canLeave}</td>`;
         if (isStatsVisible) {
@@ -150,6 +142,17 @@ function renderTable(year, month, data) {
         }
         html += `</tr>`;
     }
+
+    // 新增：最下方的「填假順序」列
+    html += `<tr class="order-row"><td colspan="2" style="background:#eee;">填假順序</td>`;
+    staffNames.forEach((name, i) => {
+        if(name) {
+            html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`;
+        }
+    });
+    html += `<td colspan="${isStatsVisible ? 5 : 2}" style="background:#eee;"></td></tr>`;
+
+    html += `</tbody>`;
     document.getElementById('dutyTable').innerHTML = html;
 }
 
@@ -161,13 +164,20 @@ function getStatusClass(v) {
     return "";
 }
 
+function saveOrderData(index, val) {
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    db.ref(`duty_system/${year}_${month}/settings/orderData`).update({ ['s'+index]: val });
+}
+
 function saveDayDeduct(day, val) {
     const [year, month] = document.getElementById('monthPicker').value.split('-');
     db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
 }
 
 function saveRowData(day) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    const picker = document.getElementById('monthPicker').value;
+    if(!picker) return;
+    const [year, month] = picker.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
     if(!row) return;
     const rowObj = { note: row.querySelector('.note-cell').innerText };
