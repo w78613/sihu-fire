@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 手動輸入版</title>
+    <title>四湖分隊雲端預定表 - 支援複製貼上版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -90,37 +90,64 @@ function closeAllModals() {
     document.getElementById('modalOverlay').style.display = 'none';
 }
 
-// 修改處：手動輸入後的邏輯檢核與存檔
+// 修改處：處理貼上事件，支援多格貼上
+function handlePaste(e, cell) {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    const rows = text.split(/\r\n|\n|\r/);
+    const tr = cell.closest('tr');
+    const td = cell.closest('td');
+    const colIndex = Array.from(tr.cells).indexOf(td);
+
+    // 取得當前行及其後續行
+    let currentRow = tr;
+    for (let i = 0; i < rows.length; i++) {
+        if (!currentRow) break;
+        const columns = rows[i].split('\t');
+        for (let j = 0; j < columns.length; j++) {
+            const targetTd = currentRow.cells[colIndex + j];
+            const targetEdit = targetTd?.querySelector('.editable-content');
+            if (targetEdit) {
+                const val = columns[j].trim();
+                targetEdit.innerText = val;
+                // 更新顏色與檢核
+                targetTd.className = `cell ${getStatusClass(val)}`;
+            }
+        }
+        // 儲存該行並移動到下一行
+        saveRowData(currentRow.dataset.day);
+        currentRow = currentRow.nextElementSibling;
+    }
+}
+
 function handleManualInput(cell) {
     const tr = cell.closest('tr');
     const day = tr.dataset.day;
     const val = cell.innerText.trim();
+    
+    // 更新顏色
+    cell.closest('td').className = `cell ${getStatusClass(val)}`;
 
-    // 人力防呆
     if (val !== "") {
         let emptyCount = 0;
         tr.querySelectorAll('.cell .editable-content').forEach(el => {
             if (el.innerText.trim() === "") emptyCount++;
         });
         const deduct = parseInt(tr.querySelector('.deduct-input')?.value || 0);
-        const realSlots = emptyCount - deduct;
-        
-        if (realSlots < 5) {
-            alert("⚠️ 無法輸入內容！\n該日剩餘人力已達下限 (5人)，內容將恢復空白。");
-            cell.innerText = ""; 
+        if ((emptyCount - deduct) < 5) {
+            alert("⚠️ 剩餘人力低於下限！內容已還原。");
+            cell.innerText = "";
+            cell.closest('td').className = "cell";
         }
     }
-    
     saveRowData(day);
 }
-
-function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
 
 function initTable() {
     const pickerVal = document.getElementById('monthPicker').value;
     if(!pickerVal) return;
     const [year, month] = pickerVal.split('-');
-    db.ref(`duty_system/global/staffNames`).on('value', (snap) => {
+    db.ref(`duty_system/global/staffNames`).once('value', (snap) => {
         staffNames = snap.val() || [];
         db.ref(`duty_system/${year}_${month}`).on('value', (snapshot) => {
             renderTable(year, month, snapshot.val() || {});
@@ -138,12 +165,7 @@ function renderTable(year, month, data) {
     let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
     staffNames.forEach(name => { if(name) html += `<th class="col-staff">${name}</th>`; });
     html += `<th class="col-note">備註</th><th class="col-stat stat-header">可填假</th>`;
-    
-    if (isStatsVisible) {
-        html += `<th class="col-stat" style="background:#eee!important;">預計格數</th>
-                 <th class="col-stat" style="background:#eee!important;">預扣天數</th>
-                 <th class="col-stat" style="background:#eee!important;">真實總數</th>`;
-    }
+    if (isStatsVisible) html += `<th class="col-stat">預計</th><th class="col-stat">預扣</th><th class="col-stat">真實</th>`;
     html += `</tr></thead><tbody>`;
 
     for (let d = 1; d <= daysInMonth; d++) {
@@ -154,11 +176,8 @@ function renderTable(year, month, data) {
         
         let emptyCount = 0;
         staffNames.forEach((name, i) => { if (name && !(rowData['s'+i] || "").trim()) emptyCount++; });
-        const deduct = parseInt(deductValues[d] || 0);
-        const realSlots = emptyCount - deduct;
-        
-        let canLeave = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : ""));
-        if (realSlots < 5) canLeave = `<span class="warning-text">無法填假</span>`;
+        const realSlots = emptyCount - parseInt(deductValues[d] || 0);
+        let canLeave = realSlots >= 7 ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : "X"));
 
         html += `<tr data-day="${d}">
             <td class="col-date-fixed" style="color:${isSun?'red':(isSat?'#e67e22':'#333')}">${d}</td>
@@ -167,26 +186,20 @@ function renderTable(year, month, data) {
         staffNames.forEach((name, i) => {
             if(name) {
                 const val = rowData['s'+i] || '';
-                // 修改處：直接給予 contenteditable 權限，並綁定失去焦點存檔 handleManualInput
-                html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" onblur="handleManualInput(this)">${val}</div></td>`;
+                // 綁定 onpaste 事件
+                html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" onblur="handleManualInput(this)" onpaste="handlePaste(event, this)">${val}</div></td>`;
             }
         });
 
         html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td>
                  <td class="col-stat">${canLeave}</td>`;
         if (isStatsVisible) {
-            html += `<td class="col-stat">${emptyCount}</td>
-                     <td class="col-stat"><input type="number" class="deduct-input" style="width:100%; border:none; text-align:center; background:transparent;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
-                     <td class="col-stat">${realSlots}</td>`;
+            html += `<td>${emptyCount}</td>
+                     <td><input type="number" class="deduct-input" style="width:100%;text-align:center;" value="${deductValues[d]||0}" onchange="saveDayDeduct(${d}, this.value)"></td>
+                     <td>${realSlots}</td>`;
         }
         html += `</tr>`;
     }
-
-    html += `<tr class="order-row"><td colspan="2">填假順序</td>`;
-    staffNames.forEach((name, i) => {
-        if(name) html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`;
-    });
-    html += `<td colspan="${isStatsVisible ? 5 : 2}"></td></tr></tbody>`;
     document.getElementById('dutyTable').innerHTML = html;
 }
 
@@ -198,19 +211,8 @@ function getStatusClass(v) {
     return "";
 }
 
-function saveOrderData(idx, val) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
-    db.ref(`duty_system/${year}_${month}/settings/orderData`).update({ ['s'+idx]: val });
-}
-
-function saveDayDeduct(day, val) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
-    db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
-}
-
 function saveRowData(day) {
     const picker = document.getElementById('monthPicker').value;
-    if(!picker) return;
     const [year, month] = picker.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
     if(!row) return;
@@ -218,6 +220,13 @@ function saveRowData(day) {
     row.querySelectorAll('.cell .editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
 }
+
+function saveDayDeduct(day, val) {
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
+}
+
+function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
 
 function toggleStaffModal() {
     const modal = document.getElementById('staffModal');
@@ -242,9 +251,7 @@ function exportToExcel() {
 (function(){
     const now = new Date();
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const year = nextMonth.getFullYear();
-    const month = String(nextMonth.getMonth() + 1).padStart(2, '0');
-    document.getElementById('monthPicker').value = `${year}-${month}`;
+    document.getElementById('monthPicker').value = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
     initTable();
 })();
 </script>
