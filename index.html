@@ -48,8 +48,10 @@
 
         .col-staff { width: 75px; font-weight: bold; }
         .col-note { width: 120px; border-right: 2px solid #333; }
-        .col-stat { width: 70px; font-weight: bold; background: #fdfdfd; }
-        .stat-header { background: #888 !important; color: white !important; }
+        
+        /* 統計欄位標題樣式 */
+        .col-stat { width: 80px; font-weight: bold; background: #fdfdfd; }
+        .stat-header { background: #bfbfbf !important; color: black !important; border-left: 2px solid #333; }
 
         .status-holiday { background-color: var(--color-holiday) !important; }
         .status-exchange { background-color: var(--color-exchange) !important; }
@@ -57,9 +59,11 @@
         .status-official { background-color: var(--color-official) !important; }
 
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; }
-        .order-row { background: #f1f8e9; font-weight: bold; }
         .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
         .warning-text { color: red; font-size: 11px; }
+        
+        /* 底部填假順序行 */
+        .order-row { background: #f1f8e9; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -98,14 +102,20 @@ function renderTable(year, month, data) {
     const savedData = data.content || {};
     const settings = data.settings || {};
     const deductValues = settings.dayDeducts || {};
-    const orderData = settings.orderData || {}; // 存儲底部的填假順序
+    const orderData = settings.orderData || {};
     const daysInMonth = new Date(year, month, 0).getDate();
     
+    // 建立表頭
     let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
     staffNames.forEach(name => { if(name) html += `<th class="col-staff">${name}</th>`; });
-    html += `<th class="col-note">備註</th><th class="col-stat">可填假</th>`;
+    html += `<th class="col-note">備註</th>`;
+    
+    // 依據照片順序新增統計標題
+    html += `<th class="col-stat stat-header">可填假</th>`;
     if (isStatsVisible) {
-        html += `<th class="col-stat">預計格數</th><th class="col-stat">預扣天數</th><th class="col-stat">真實總數</th>`;
+        html += `<th class="col-stat" style="background:#f2f2f2 !important;">預計格數</th>
+                 <th class="col-stat" style="background:#f2f2f2 !important;">預扣天數</th>
+                 <th class="col-stat" style="background:#f2f2f2 !important;">真實格子總數</th>`;
     }
     html += `</tr></thead><tbody>`;
 
@@ -115,11 +125,14 @@ function renderTable(year, month, data) {
         const rowData = savedData[d] || {};
         const isSun = (dayIdx === 0), isSat = (dayIdx === 6);
         
+        // 計算當日空白格
         let emptyCount = 0;
         staffNames.forEach((name, i) => { if (name && !(rowData['s'+i] || "").trim()) emptyCount++; });
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyCount - deduct;
-        let canLeave = (realSlots === 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : ""));
+        
+        // 判定可填假數量
+        let canLeave = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : ""));
         if (realSlots <= 4) canLeave = `<span class="warning-text">無法填假</span>`;
 
         html += `<tr data-day="${d}">
@@ -133,26 +146,26 @@ function renderTable(year, month, data) {
             }
         });
 
+        // 統計內容：備註 -> 可填假 -> 預計格數 -> 預扣 -> 真實總數
         html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td>
                  <td class="col-stat">${canLeave}</td>`;
         if (isStatsVisible) {
             html += `<td class="col-stat">${emptyCount}</td>
-                     <td class="col-stat"><input type="number" style="width:100%; border:none; text-align:center;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
+                     <td class="col-stat"><input type="number" style="width:100%; border:none; text-align:center; background:transparent;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
                      <td class="col-stat">${realSlots}</td>`;
         }
         html += `</tr>`;
     }
 
-    // 新增：最下方的「填假順序」列
-    html += `<tr class="order-row"><td colspan="2" style="background:#eee;">填假順序</td>`;
+    // 底部填假順序
+    html += `<tr class="order-row"><td colspan="2">填假順序</td>`;
     staffNames.forEach((name, i) => {
         if(name) {
             html += `<td contenteditable="true" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</td>`;
         }
     });
-    html += `<td colspan="${isStatsVisible ? 5 : 2}" style="background:#eee;"></td></tr>`;
-
-    html += `</tbody>`;
+    html += `<td colspan="${isStatsVisible ? 5 : 2}"></td></tr></tbody>`;
+    
     document.getElementById('dutyTable').innerHTML = html;
 }
 
@@ -164,37 +177,4 @@ function getStatusClass(v) {
     return "";
 }
 
-function saveOrderData(index, val) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
-    db.ref(`duty_system/${year}_${month}/settings/orderData`).update({ ['s'+index]: val });
-}
-
-function saveDayDeduct(day, val) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
-    db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
-}
-
-function saveRowData(day) {
-    const picker = document.getElementById('monthPicker').value;
-    if(!picker) return;
-    const [year, month] = picker.split('-');
-    const row = document.querySelector(`tr[data-day="${day}"]`);
-    if(!row) return;
-    const rowObj = { note: row.querySelector('.note-cell').innerText };
-    row.querySelectorAll('.cell .editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
-    db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
-}
-
-function exportToExcel() {
-    const wb = XLSX.utils.table_to_book(document.getElementById("dutyTable"));
-    XLSX.writeFile(wb, `預定表_${document.getElementById('monthPicker').value}.xlsx`);
-}
-
-(function(){
-    const now = new Date();
-    document.getElementById('monthPicker').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-    initTable();
-})();
-</script>
-</body>
-</html>
+function saveOrderData(index
