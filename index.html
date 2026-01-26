@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 快速點選版</title>
+    <title>四湖分隊雲端預定表 - 人力防呆版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -55,17 +55,13 @@
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; }
         .btn { padding: 8px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
         .order-row { background: #f1f8e9; font-weight: bold; border-top: 2px solid #333; }
-        .warning-text { color: red; font-size: 11px; }
+        .warning-text { color: red; font-size: 11px; font-weight: bold; }
 
-        /* 快速選單樣式 */
-        #quickMenu { display: none; position: fixed; background: white; border: 2px solid #333; z-index: 3000; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); overflow: hidden; }
-        .menu-item { padding: 10px 15px; border-bottom: 1px solid #eee; cursor: pointer; text-align: center; font-weight: bold; transition: 0.2s; }
+        #quickMenu { display: none; position: fixed; background: white; border: 2px solid #333; z-index: 3000; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .menu-item { padding: 12px 20px; border-bottom: 1px solid #eee; cursor: pointer; text-align: center; font-weight: bold; }
         .menu-item:hover { background: #f0f0f0; }
-        .menu-item.clear { color: red; border-bottom: none; }
-
-        #staffModal { display: none; position: fixed; top: 15%; left: 50%; transform: translateX(-50%); width: 85%; max-width: 600px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-        #staffInputs { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 15px; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
+        #staffModal { display: none; position: fixed; top: 15%; left: 50%; transform: translateX(-50%); width: 85%; max-width: 600px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -88,20 +84,21 @@
     <div class="menu-item" onclick="setQuickVal('換休2')">換休2</div>
     <div class="menu-item" onclick="setQuickVal('月補')">月補</div>
     <div class="menu-item" onclick="setQuickVal('公假A1')">公假A1</div>
-    <div class="menu-item clear" onclick="setQuickVal('')">❌ 清除內容</div>
+    <div class="menu-item" style="color:red;" onclick="setQuickVal('')">❌ 清除</div>
 </div>
 
 <div class="modal-overlay" id="modalOverlay" onclick="closeAllModals()"></div>
 <div id="staffModal">
     <h3 style="margin-top:0;">👥 隊員名單設定</h3>
-    <div id="staffInputs"></div>
-    <button class="btn" style="background: #0984e3; width: 100%;" onclick="saveStaffNames()">✅ 儲存</button>
+    <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap:10px;"></div>
+    <button class="btn" style="background: #0984e3; width: 100%; margin-top:10px;" onclick="saveStaffNames()">✅ 儲存</button>
 </div>
 
 <script>
 let staffNames = [];
 let isStatsVisible = false;
 let currentActiveCell = null;
+let currentMonthData = {};
 
 function closeAllModals() {
     document.getElementById('staffModal').style.display = 'none';
@@ -110,45 +107,45 @@ function closeAllModals() {
 }
 
 function showQuickMenu(e, cell) {
-    e.preventDefault();
     currentActiveCell = cell;
     const menu = document.getElementById('quickMenu');
     menu.style.display = 'block';
-    menu.style.left = e.clientX + 'px';
-    menu.style.top = (e.clientY + 10) + 'px';
+    menu.style.left = Math.min(e.clientX, window.innerWidth - 120) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - 250) + 'px';
     document.getElementById('modalOverlay').style.display = 'block';
 }
 
 function setQuickVal(val) {
-    if (currentActiveCell) {
-        currentActiveCell.innerText = val;
-        const day = currentActiveCell.closest('tr').dataset.day;
-        saveRowData(day);
+    if (!currentActiveCell) return;
+    
+    const tr = currentActiveCell.closest('tr');
+    const day = tr.dataset.day;
+    
+    // 預先檢查人力 (防呆邏輯)
+    if (val !== "") {
+        let emptyCount = 0;
+        tr.querySelectorAll('.cell .editable-content').forEach(el => {
+            if (el === currentActiveCell) { if (val === "") emptyCount++; } // 模擬填入後的狀態
+            else { if (el.innerText.trim() === "") emptyCount++; }
+        });
+        
+        const picker = document.getElementById('monthPicker').value.split('-');
+        const deduct = parseInt(tr.querySelector('.deduct-input')?.value || 0);
+        const realSlots = emptyCount - deduct;
+
+        if (realSlots < 5) {
+            alert("⚠️ 無法填假！\n該日剩餘人力已達下限 (真實總數不可小於 5)。");
+            closeAllModals();
+            return;
+        }
     }
+
+    currentActiveCell.innerText = val;
+    saveRowData(day);
     closeAllModals();
 }
 
 function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
-
-function toggleStaffModal() {
-    const modal = document.getElementById('staffModal');
-    const overlay = document.getElementById('modalOverlay');
-    const container = document.getElementById('staffInputs');
-    container.innerHTML = Array.from({length:18}).map((_, i) => 
-        `<div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:75%;"></div>`
-    ).join('');
-    modal.style.display = 'block';
-    overlay.style.display = 'block';
-}
-
-function saveStaffNames() {
-    const newNames = [];
-    for (let i = 0; i < 18; i++) newNames.push(document.getElementById(`staffInput${i}`).value.trim());
-    db.ref(`duty_system/global/staffNames`).set(newNames).then(() => {
-        closeAllModals();
-        initTable();
-    });
-}
 
 function initTable() {
     const pickerVal = document.getElementById('monthPicker').value;
@@ -157,7 +154,8 @@ function initTable() {
     db.ref(`duty_system/global/staffNames`).on('value', (snap) => {
         staffNames = snap.val() || [];
         db.ref(`duty_system/${year}_${month}`).on('value', (snapshot) => {
-            renderTable(year, month, snapshot.val() || {});
+            currentMonthData = snapshot.val() || {};
+            renderTable(year, month, currentMonthData);
         });
     });
 }
@@ -190,8 +188,9 @@ function renderTable(year, month, data) {
         staffNames.forEach((name, i) => { if (name && !(rowData['s'+i] || "").trim()) emptyCount++; });
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyCount - deduct;
+        
         let canLeave = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : ""));
-        if (realSlots <= 4) canLeave = `<span class="warning-text">無法填假</span>`;
+        if (realSlots < 5) canLeave = `<span class="warning-text">無法填假</span>`;
 
         html += `<tr data-day="${d}">
             <td class="col-date-fixed" style="color:${isSun?'red':(isSat?'#e67e22':'#333')}">${d}</td>
@@ -200,7 +199,7 @@ function renderTable(year, month, data) {
         staffNames.forEach((name, i) => {
             if(name) {
                 const val = rowData['s'+i] || '';
-                html += `<td class="cell ${getStatusClass(val)}"><div contenteditable="true" class="editable-content" onclick="showQuickMenu(event, this)" onblur="saveRowData(${d})">${val}</div></td>`;
+                html += `<td class="cell ${getStatusClass(val)}"><div class="editable-content" onclick="showQuickMenu(event, this)">${val}</div></td>`;
             }
         });
 
@@ -208,7 +207,7 @@ function renderTable(year, month, data) {
                  <td class="col-stat">${canLeave}</td>`;
         if (isStatsVisible) {
             html += `<td class="col-stat">${emptyCount}</td>
-                     <td class="col-stat"><input type="number" style="width:100%; border:none; text-align:center; background:transparent;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
+                     <td class="col-stat"><input type="number" class="deduct-input" style="width:100%; border:none; text-align:center; background:transparent;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
                      <td class="col-stat">${realSlots}</td>`;
         }
         html += `</tr>`;
@@ -231,8 +230,7 @@ function getStatusClass(v) {
 }
 
 function saveOrderData(idx, val) {
-    const picker = document.getElementById('monthPicker').value;
-    const [year, month] = picker.split('-');
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
     db.ref(`duty_system/${year}_${month}/settings/orderData`).update({ ['s'+idx]: val });
 }
 
@@ -242,8 +240,7 @@ function saveDayDeduct(day, val) {
 }
 
 function saveRowData(day) {
-    const picker = document.getElementById('monthPicker').value;
-    const [year, month] = picker.split('-');
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
     if(!row) return;
     const rowObj = { note: row.querySelector('.note-cell').innerText };
@@ -251,9 +248,24 @@ function saveRowData(day) {
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
 }
 
+function toggleStaffModal() {
+    const modal = document.getElementById('staffModal');
+    document.getElementById('staffInputs').innerHTML = Array.from({length:18}).map((_, i) => 
+        `<div>${i+1}: <input type="text" value="${staffNames[i] || ''}" id="staffInput${i}" style="width:75%;"></div>`
+    ).join('');
+    modal.style.display = 'block';
+    document.getElementById('modalOverlay').style.display = 'block';
+}
+
+function saveStaffNames() {
+    const newNames = [];
+    for (let i = 0; i < 18; i++) newNames.push(document.getElementById(`staffInput${i}`).value.trim());
+    db.ref(`duty_system/global/staffNames`).set(newNames).then(() => closeAllModals());
+}
+
 function exportToExcel() {
     const wb = XLSX.utils.table_to_book(document.getElementById("dutyTable"));
-    XLSX.writeFile(wb, `預定表_${document.getElementById('monthPicker').value}.xlsx`);
+    XLSX.writeFile(wb, `四湖預定表_${document.getElementById('monthPicker').value}.xlsx`);
 }
 
 (function(){
