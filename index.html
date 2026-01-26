@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 動態V班次版</title>
+    <title>四湖分隊雲端預定表 - 自動下月版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -35,6 +35,10 @@
         .col-date-fixed { position: sticky; left: 0; z-index: 91; background: white; border-right: 1px solid #333; width: 45px; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; background: white; border-right: 2px solid #333 !important; width: 45px; }
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
+        
+        /* 公假A1 顏色設定 */
+        .status-a1 { background-color: #fff176 !important; font-weight: bold; }
+
         .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
         .order-row { background: #f1f8e9; font-weight: bold; border-top: 2px solid #333; }
         .warning-text { color: red; font-size: 11px; font-weight: bold; }
@@ -128,7 +132,8 @@ function renderTable(year, month, data) {
         staffData.forEach((s, i) => {
             if(s.name) {
                 const val = rowData['s'+i] || '';
-                html += `<td><div contenteditable="true" class="editable-content" onblur="handleManualInput(this)">${val}</div></td>`;
+                const cellClass = (val === '公假A1') ? 'status-a1' : '';
+                html += `<td class="${cellClass}"><div contenteditable="true" class="editable-content" onblur="handleManualInput(this)">${val}</div></td>`;
             }
         });
 
@@ -172,16 +177,15 @@ function handleManualInput(cell) {
     saveRowData(tr.dataset.day);
 }
 
-// 修改後的動態流水號帶入邏輯
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
     let updates = {};
-    if(!confirm(`確定要帶入勤二休二文字嗎？\n(當天放假的人將依序標記為 V1-V9)`)) return;
+    if(!confirm(`將依照起始日帶入勤休文字（放假者依序填入V1-V9），是否繼續？`)) return;
 
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
-        let vCounter = 1; // 每天重置流水號
+        let vCounter = 1; 
         
         staffData.forEach((s, i) => {
             if(s.name && s.startDate) {
@@ -189,13 +193,12 @@ function applyDutyCycle() {
                 const diffDays = Math.floor((currentDate - start) / 86400000);
                 if (diffDays >= 0) {
                     const cycle = diffDays % 4;
-                    if (cycle === 0 || cycle === 1) { // 判定為放假
-                        // 如果在 V1-V9 範圍內則帶入 V 號，超過則標記休假
+                    if (cycle === 0 || cycle === 1) { 
                         const label = (vCounter <= 9) ? `V${vCounter}` : "休假";
                         updates[`${d}/s${i}`] = label;
                         vCounter++;
                     } else {
-                        updates[`${d}/s${i}`] = ""; // 上班清空
+                        updates[`${d}/s${i}`] = ""; 
                     }
                 }
             }
@@ -254,8 +257,13 @@ function clearCurrentMonth() {
 function exportToExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("dutyTable")), `四湖預定表.xlsx`); }
 
 (function(){
+    // 修改為預設顯示「下個月」
     const now = new Date();
-    document.getElementById('monthPicker').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const y = nextMonth.getFullYear();
+    const m = String(nextMonth.getMonth() + 1).padStart(2, '0');
+    
+    document.getElementById('monthPicker').value = `${y}-${m}`;
     initTable();
 })();
 </script>
