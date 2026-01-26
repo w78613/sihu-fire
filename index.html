@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 長期受訓版</title>
+    <title>四湖分隊雲端預定表 - 邏輯修正版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -60,7 +60,7 @@
 
 <div class="modal-overlay" id="modalOverlay" onclick="closeAllModals()"></div>
 <div id="staffModal">
-    <h3>👥 名單與起始日設定 (勾選受訓者一至五帶A1)</h3>
+    <h3>👥 名單與起始日設定</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;"></div>
     <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ccc;">
         <button class="btn" style="background: #0984e3; width: 100%; margin-bottom: 10px;" onclick="saveStaffData()">✅ 儲存設定</button>
@@ -169,30 +169,32 @@ function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
     let updates = {};
-    if(!confirm(`將執行勤休帶入：\n1. 受訓者週一至五自動帶入「公假A1」\n2. 其餘時間及人員依起始日排入V1-V9`)) return;
+    if(!confirm(`執行勤休制度帶入？`)) return;
 
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
-        const dayIdx = currentDate.getDay(); // 0是週日, 1-5是週一至五, 6是週六
+        const dayIdx = currentDate.getDay(); 
         let vCounter = 1; 
         
         staffData.forEach((s, i) => {
             if(s.name && s.startDate) {
-                // 特殊判斷：長期受訓人員在週一至五
-                if (s.isTraining && dayIdx >= 1 && dayIdx <= 5) {
-                    updates[`${d}/s${i}`] = "公假A1";
-                } else {
-                    // 一般勤二休二邏輯
-                    const start = new Date(s.startDate);
-                    const diffDays = Math.floor((currentDate - start) / 86400000);
-                    if (diffDays >= 0) {
-                        const cycle = diffDays % 4;
-                        if (cycle === 0 || cycle === 1) { 
-                            updates[`${d}/s${i}`] = (vCounter <= 9) ? `V${vCounter}` : "休假";
-                            vCounter++;
-                        } else {
-                            updates[`${d}/s${i}`] = ""; 
-                        }
+                const start = new Date(s.startDate);
+                const diffDays = Math.floor((currentDate - start) / 86400000);
+                if (diffDays >= 0) {
+                    const cycle = diffDays % 4;
+                    const isOffDay = (cycle === 0 || cycle === 1);
+                    
+                    let currentV = "";
+                    if (isOffDay) {
+                        currentV = (vCounter <= 9) ? `V${vCounter}` : "休假";
+                        vCounter++;
+                    }
+
+                    // 邏輯修正：如果是受訓人員且是平日，優先顯示公假A1，但後台 vCounter 已被佔用
+                    if (s.isTraining && dayIdx >= 1 && dayIdx <= 5) {
+                        updates[`${d}/s${i}`] = "公假A1";
+                    } else {
+                        updates[`${d}/s${i}`] = currentV;
                     }
                 }
             }
@@ -227,7 +229,7 @@ function toggleStaffModal() {
             <input type="text" placeholder="姓名" value="${s.name}" id="name${i}">
             <input type="date" value="${s.startDate || ''}" id="date${i}">
             <label style="font-size:12px; color:#d35400;">
-                <input type="checkbox" id="train${i}" ${s.isTraining ? 'checked' : ''}> 長期受訓 (一~五A1)
+                <input type="checkbox" id="train${i}" ${s.isTraining ? 'checked' : ''}> 長期受訓
             </label>
         </div>`;
     }).join('');
