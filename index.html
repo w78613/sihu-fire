@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - V序號絕對修正版</title>
+    <title>四湖分隊雲端預定表 - 受訓假日強迫放假版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -165,40 +165,57 @@ function handleManualInput(cell) {
     saveRowData(tr.dataset.day);
 }
 
-// 最終修正邏輯
+// 修正後的勤休帶入邏輯
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
     let updates = {};
-    if(!confirm(`執行勤休制度帶入？`)) return;
+    if(!confirm(`執行勤休制度帶入？（受訓人員：一至五 A1，六日強制放假）`)) return;
 
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
         const dayIdx = currentDate.getDay(); 
-        const isWeekday = (dayIdx >= 1 && dayIdx <= 5);
+        const isWeekend = (dayIdx === 0 || dayIdx === 6);
         let vCounter = 1; 
         
         staffData.forEach((s, i) => {
-            if(s.name && s.startDate) {
-                const start = new Date(s.startDate);
-                const diffDays = Math.floor((currentDate - start) / 86400000);
-                if (diffDays >= 0) {
-                    const cycle = diffDays % 4;
-                    const isScheduleOff = (cycle === 0 || cycle === 1); // 判定起始日是否輪到放假
-                    
-                    let vLabel = "";
-                    if (isScheduleOff) {
-                        vLabel = (vCounter <= 9) ? `V${vCounter}` : "休假";
-                        vCounter++;
+            if(s.name) {
+                let shouldOff = false;
+                
+                // 1. 判斷這天該不該放假 (shouldOff)
+                if (s.isTraining) {
+                    // 長期受訓者：週末強迫放假
+                    if (isWeekend) shouldOff = true;
+                } else if (s.startDate) {
+                    // 一般人員：看起始日週期
+                    const start = new Date(s.startDate);
+                    const diffDays = Math.floor((currentDate - start) / 86400000);
+                    if (diffDays >= 0) {
+                        const cycle = diffDays % 4;
+                        if (cycle === 0 || cycle === 1) shouldOff = true;
                     }
+                }
 
-                    // 核心顯示判斷
-                    if (s.isTraining && isWeekday) {
-                        // 受訓者平日：不管輪到什麼，一律 A1
+                // 2. 依照 shouldOff 分配 V 序號並決定文字
+                if (shouldOff) {
+                    let vLabel = (vCounter <= 9) ? `V${vCounter}` : "休假";
+                    vCounter++;
+                    
+                    if (s.isTraining && !isWeekend) {
+                        // 受訓者平日剛好輪到放假，但畫面要顯示 A1 (後台已占掉 V 序號)
                         updates[`${d}/s${i}`] = "公假A1";
                     } else {
-                        // 其餘情況（受訓者假日 或 一般人）：依照起始日判斷
-                        updates[`${d}/s${i}`] = isScheduleOff ? vLabel : "";
+                        // 一般人或受訓者週末，顯示 V 序號
+                        updates[`${d}/s${i}`] = vLabel;
+                    }
+                } else {
+                    // 3. 不放假的情況
+                    if (s.isTraining && !isWeekend) {
+                        // 受訓者平日上班日：顯示 A1
+                        updates[`${d}/s${i}`] = "公假A1";
+                    } else {
+                        // 一般人上班日：空白
+                        updates[`${d}/s${i}`] = "";
                     }
                 }
             }
