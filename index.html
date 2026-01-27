@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 班別統計版</title>
+    <title>四湖分隊雲端預定表 - 統計功能整合版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -37,10 +37,10 @@
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
         .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
-        .order-row { background: #f1f8e9; font-weight: bold; border-top: 2px solid #333; }
+        .stat-col { background-color: #eee; font-weight: bold; }
+        .stat-a { background-color: #e3f2fd !important; }
+        .stat-b { background-color: #fff3e0 !important; }
         .warning-text { color: red; font-size: 11px; font-weight: bold; }
-        .stat-row-a { background-color: #e3f2fd; font-weight: bold; }
-        .stat-row-b { background-color: #fff3e0; font-weight: bold; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
@@ -69,14 +69,10 @@
 
 <script>
 let staffData = []; 
-let isStatsVisible = true; // 預設開啟方便觀察
-
-function closeAllModals() {
-    document.getElementById('staffModal').style.display = 'none';
-    document.getElementById('modalOverlay').style.display = 'none';
-}
+let isStatsVisible = false;
 
 function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
+function closeAllModals() { document.getElementById('staffModal').style.display = 'none'; document.getElementById('modalOverlay').style.display = 'none'; }
 
 function initTable() {
     const pickerVal = document.getElementById('monthPicker').value;
@@ -101,7 +97,7 @@ function renderTable(year, month, data) {
     html += `<th>備註</th><th style="min-width:60px;">可填</th>`;
     
     if (isStatsVisible) {
-        html += `<th class="stat-row-a">A-</th><th class="stat-row-b">B-</th>`;
+        html += `<th class="stat-col">預計</th><th class="stat-col">預扣</th><th class="stat-col">真實</th><th class="stat-a">A-</th><th class="stat-b">B-</th>`;
     }
     html += `</tr></thead><tbody>`;
 
@@ -109,19 +105,16 @@ function renderTable(year, month, data) {
         const date = new Date(year, month - 1, d);
         const dayIdx = date.getDay();
         const rowData = savedData[d] || {};
-        const isSun = (dayIdx === 0), isSat = (dayIdx === 6);
+        const isWeekend = (dayIdx === 0 || dayIdx === 6);
         
-        let emptyTotal = 0;
-        let emptyA = 0; // 4-8 人 (index 3-7)
-        let emptyB = 0; // 9-14 人 (index 8-13)
-
+        let emptyTotal = 0, emptyA = 0, emptyB = 0;
         staffData.forEach((s, i) => {
             if (s.name) {
                 const val = (rowData['s'+i] || "").trim();
                 if (val === "") {
                     emptyTotal++;
-                    if (i >= 3 && i <= 7) emptyA++;
-                    if (i >= 8 && i <= 13) emptyB++;
+                    if (i >= 3 && i <= 7) emptyA++;   // 人員 4-8
+                    if (i >= 8 && i <= 13) emptyB++;  // 人員 9-14
                 }
             }
         });
@@ -133,8 +126,8 @@ function renderTable(year, month, data) {
         if (realSlots < 5) canLeaveText = `<span class="warning-text">下限</span>`;
 
         html += `<tr data-day="${d}">
-            <td class="col-date-fixed" style="color:${isSun?'red':(isSat?'#e67e22':'#333')}">${d}</td>
-            <td class="col-week-fixed" style="color:${isSun?'red':(isSat?'#e67e22':'#333')}">${["日","一","二","三","四","五","六"][dayIdx]}</td>`;
+            <td class="col-date-fixed" style="color:${dayIdx===0?'red':(dayIdx===6?'#e67e22':'#333')}">${d}</td>
+            <td class="col-week-fixed" style="color:${dayIdx===0?'red':(dayIdx===6?'#e67e22':'#333')}">${["日","一","二","三","四","五","六"][dayIdx]}</td>`;
         
         staffData.forEach((s, i) => {
             if(s.name) {
@@ -147,13 +140,15 @@ function renderTable(year, month, data) {
         html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td><td>${canLeaveText}</td>`;
         
         if (isStatsVisible) {
-            // 自動計算 A 或 B 班帶入
             let showA = (emptyA > emptyB) ? canLeaveNum : 0;
             let showB = (emptyB >= emptyA) ? canLeaveNum : 0;
-            // 如果總可填是 0 或 X，統計欄也顯示 0
-            if (realSlots <= 5) { showA = 0; showB = 0; }
-
-            html += `<td class="stat-row-a">${showA}</td><td class="stat-row-b">${showB}</td>`;
+            if (realSlots < 6) { showA = 0; showB = 0; }
+            
+            html += `<td class="stat-col">${emptyTotal}</td>
+                     <td class="stat-col"><input type="number" style="width:40px;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
+                     <td class="stat-col">${realSlots}</td>
+                     <td class="stat-a">${showA}</td>
+                     <td class="stat-b">${showB}</td>`;
         }
         html += `</tr>`;
     }
@@ -162,16 +157,13 @@ function renderTable(year, month, data) {
     document.getElementById('dutyTable').innerHTML = html;
 }
 
-function handleManualInput(cell) {
-    const tr = cell.closest('tr');
-    saveRowData(tr.dataset.day);
-}
+function handleManualInput(cell) { saveRowData(cell.closest('tr').dataset.day); }
 
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
     let updates = {};
-    if(!confirm(`執行勤休制度帶入？`)) return;
+    if(!confirm(`執行帶入？（受訓：一至五A1，六日V班）`)) return;
 
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
@@ -182,8 +174,8 @@ function applyDutyCycle() {
         staffData.forEach((s, i) => {
             if(s.name) {
                 let shouldOff = false;
-                if (s.isTraining) {
-                    if (isWeekend) shouldOff = true;
+                if (s.isTraining && isWeekend) {
+                    shouldOff = true;
                 } else if (s.startDate) {
                     const start = new Date(s.startDate);
                     const diffDays = Math.floor((currentDate - start) / 86400000);
@@ -192,6 +184,7 @@ function applyDutyCycle() {
                         if (cycle === 0 || cycle === 1) shouldOff = true;
                     }
                 }
+
                 if (shouldOff) {
                     let vLabel = (vCounter <= 9) ? `V${vCounter}` : "休假";
                     vCounter++;
@@ -211,6 +204,11 @@ function saveRowData(day) {
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     row.querySelectorAll('.editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
+}
+
+function saveDayDeduct(day, val) {
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
 }
 
 function toggleStaffModal() {
@@ -236,8 +234,10 @@ function saveStaffData() {
             isTraining: document.getElementById(`train${i}`).checked
         });
     }
-    db.ref(`duty_system/global/staffData`).set(newData).then(() => { alert("設定儲存成功"); closeAllModals(); });
+    db.ref(`duty_system/global/staffData`).set(newData).then(() => { alert("儲存成功"); closeAllModals(); });
 }
+
+function exportToExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("dutyTable")), `四湖預定表.xlsx`); }
 
 (function(){
     const now = new Date();
