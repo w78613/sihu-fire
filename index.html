@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 填假順序整合版</title>
+    <title>四湖分隊雲端預定表 - 清空功能版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -45,6 +45,7 @@
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
+        .danger-zone { margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ddd; }
     </style>
 </head>
 <body>
@@ -65,7 +66,16 @@
 <div id="staffModal">
     <h3>👥 名單與起始日設定</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;"></div>
-    <button class="btn" style="background: #0984e3; width: 100%; margin-top: 15px;" onclick="saveStaffData()">✅ 儲存設定</button>
+    
+    <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button class="btn" style="background: #0984e3; flex: 2;" onclick="saveStaffData()">✅ 儲存設定</button>
+        <button class="btn" style="background: #636e72; flex: 1;" onclick="closeAllModals()">關閉</button>
+    </div>
+
+    <div class="danger-zone">
+        <p style="color: #d63031; font-size: 13px; margin-bottom: 8px;">⚠️ 危險區域：僅刪除選定月份內人員的勤務內容 (V班、公假等)，保留備註與順序。</p>
+        <button class="btn" style="background: #d63031; width: 100%;" onclick="clearMonthContent()">🗑️ 一鍵清空本月勤務內容</button>
+    </div>
 </div>
 
 <script>
@@ -90,7 +100,7 @@ function initTable() {
 function renderTable(year, month, data) {
     const savedData = data.content || {};
     const settings = data.settings || {};
-    const orderData = data.order || {}; // 新增：讀取填假順序
+    const orderData = data.order || {};
     const deductValues = settings.dayDeducts || {};
     const daysInMonth = new Date(year, month, 0).getDate();
     
@@ -103,7 +113,6 @@ function renderTable(year, month, data) {
     }
     html += `</tr></thead><tbody>`;
 
-    // 渲染每日數據
     for (let d = 1; d <= daysInMonth; d++) {
         const date = new Date(year, month - 1, d);
         const dayIdx = date.getDay();
@@ -115,15 +124,14 @@ function renderTable(year, month, data) {
                 const val = (rowData['s'+i] || "").trim();
                 if (val === "") {
                     emptyTotal++;
-                    if (i >= 3 && i <= 7) emptyA++;   // 人員 4-8
-                    if (i >= 8 && i <= 13) emptyB++;  // 人員 9-14
+                    if (i >= 3 && i <= 7) emptyA++;
+                    if (i >= 8 && i <= 13) emptyB++;
                 }
             }
         });
 
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyTotal - deduct;
-        let canLeaveNum = (realSlots >= 7) ? 2 : (realSlots === 6 ? 1 : 0);
         let canLeaveText = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : "X"));
         if (realSlots < 5) canLeaveText = `<span class="warning-text">下限</span>`;
 
@@ -142,10 +150,8 @@ function renderTable(year, month, data) {
         html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td><td>${canLeaveText}</td>`;
         
         if (isStatsVisible) {
-            let showA = (emptyA > emptyB) ? canLeaveNum : 0;
-            let showB = (emptyB >= emptyA) ? canLeaveNum : 0;
-            if (realSlots < 6) { showA = 0; showB = 0; }
-            
+            let showA = (realSlots >= 6 && emptyA > emptyB) ? (realSlots >= 7 ? 2 : 1) : 0;
+            let showB = (realSlots >= 6 && emptyB >= emptyA) ? (realSlots >= 7 ? 2 : 1) : 0;
             html += `<td class="stat-col">${emptyTotal}</td>
                      <td class="stat-col"><input type="number" style="width:40px;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
                      <td class="stat-col">${realSlots}</td>
@@ -155,35 +161,55 @@ function renderTable(year, month, data) {
         html += `</tr>`;
     }
 
-    // ==========================================
-    // 新增：最底部的「填假順序」列
-    // ==========================================
+    // 填假順序
     html += `<tr class="order-row">
         <td class="col-date-fixed" colspan="2" style="background:#f1f2f6;">填假順序</td>`;
-    
     staffData.forEach((s, i) => {
         if(s.name) {
             const val = orderData['s'+i] || '';
             html += `<td><div contenteditable="true" class="editable-content" onblur="saveOrderData(${i}, this.innerText)">${val}</div></td>`;
         }
     });
-
-    // 補齊備註與可填欄位之後的格子
     html += `<td></td><td></td>`; 
     if (isStatsVisible) html += `<td colspan="5"></td>`;
-    html += `</tr>`;
-
-    html += `</tbody>`;
+    html += `</tr></tbody>`;
     document.getElementById('dutyTable').innerHTML = html;
 }
 
-// 儲存填假順序函數
 function saveOrderData(staffIdx, value) {
+    const pickerVal = document.getElementById('monthPicker').value;
+    const [year, month] = pickerVal.split('-');
+    db.ref(`duty_system/${year}_${month}/order`).update({ ['s' + staffIdx]: value });
+}
+
+// ==========================================
+// 新增：一鍵清空功能
+// ==========================================
+function clearMonthContent() {
     const pickerVal = document.getElementById('monthPicker').value;
     if(!pickerVal) return;
     const [year, month] = pickerVal.split('-');
-    db.ref(`duty_system/${year}_${month}/order`).update({
-        ['s' + staffIdx]: value
+
+    if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的所有勤務內容嗎？\n(將清空V班與公假，保留備註與順序)`)) return;
+
+    db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
+        const data = snap.val() || {};
+        let updates = {};
+
+        // 遍歷每一天，只清空人員格子 (s0, s1...)，保留 note (備註)
+        Object.keys(data).forEach(day => {
+            Object.keys(data[day]).forEach(key => {
+                if (key.startsWith('s')) {
+                    updates[`${day}/${key}`] = "";
+                }
+            });
+        });
+
+        db.ref(`duty_system/${year}_${month}/content`).update(updates)
+          .then(() => {
+              alert("勤務內容已成功清空！");
+              closeAllModals();
+          });
     });
 }
 
@@ -213,7 +239,6 @@ function applyDutyCycle() {
                         if (cycle === 0 || cycle === 1) shouldOff = true;
                     }
                 }
-
                 if (shouldOff) {
                     let vLabel = (vCounter <= 9) ? `V${vCounter}` : "休假";
                     vCounter++;
