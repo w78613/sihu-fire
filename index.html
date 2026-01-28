@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 自動加總版</title>
+    <title>四湖分隊雲端預定表 - 填假順序優化版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -25,7 +25,7 @@
     </script>
 
     <style>
-        :root { --header-dark: #2c3e50; }
+        :root { --header-dark: #2c3e50; --stat-blue: #3498db; --stat-orange: #e67e22; }
         body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
         .top-bar { display: flex; gap: 8px; padding: 10px; background: white; position: sticky; top: 0; z-index: 1000; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); flex-wrap: wrap; }
         .table-container { overflow: auto; max-height: 85vh; padding: 10px; }
@@ -39,21 +39,21 @@
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
         .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
         
-        /* 計算欄位色彩優化 */
+        /* 計算欄位顏色 */
         .stat-header { background-color: #455a64 !important; color: white !important; }
         .stat-col { background-color: #ecf0f1; font-weight: bold; color: #2c3e50; }
         .stat-deduct { background-color: #dfe6e9; }
         .stat-real { background-color: #d1d8e0; color: #d35400; font-weight: 900; }
-        .stat-a { background-color: #3498db !important; color: white !important; font-weight: bold; }
-        .stat-b { background-color: #e67e22 !important; color: white !important; font-weight: bold; }
+        .stat-a { background-color: var(--stat-blue) !important; color: white !important; font-weight: bold; }
+        .stat-b { background-color: var(--stat-orange) !important; color: white !important; font-weight: bold; }
         
-        /* 加總行特定樣式 */
-        .sum-a { background-color: #2980b9 !important; color: white !important; font-size: 15px; }
-        .sum-b { background-color: #d35400 !important; color: white !important; font-size: 15px; }
+        /* 填假順序優化顏色 */
+        .order-title { background-color: #34495e !important; color: white !important; font-weight: bold; }
+        .order-cell { background-color: #f1f4f7 !important; font-weight: bold; }
+        .sum-a { background-color: #2980b9 !important; color: white !important; font-size: 15px; font-weight: bold; }
+        .sum-b { background-color: #d35400 !important; color: white !important; font-size: 15px; font-weight: bold; }
         
         .warning-text { color: red; font-size: 11px; font-weight: bold; }
-        .order-row { background-color: #dcdde1; font-weight: bold; }
-        
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
@@ -116,8 +116,8 @@ function renderTable(year, month, data) {
     const deductValues = settings.dayDeducts || {};
     const daysInMonth = new Date(year, month, 0).getDate();
     
-    let totalA = 0; // A組總計
-    let totalB = 0; // B組總計
+    let totalA = 0; 
+    let totalB = 0; 
     
     let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
     staffData.forEach(s => { if(s.name) html += `<th>${s.name}</th>`; });
@@ -179,19 +179,21 @@ function renderTable(year, month, data) {
         html += `</tr>`;
     }
 
-    // 填假順序列 + 自動加總
-    html += `<tr class="order-row">
-        <td class="col-date-fixed" colspan="2" style="background:#bdc3c7;">填假順序</td>`;
+    // 填假順序列 (移除月總計符號並優化顏色)
+    html += `<tr>
+        <td class="col-date-fixed order-title" colspan="2">填假順序</td>`;
     staffData.forEach((s, i) => {
         if(s.name) {
             const val = orderData['s'+i] || '';
-            html += `<td><div contenteditable="true" class="editable-content" onblur="saveOrderData(${i}, this.innerText)">${val}</div></td>`;
+            html += `<td class="order-cell"><div contenteditable="true" class="editable-content" onblur="saveOrderData(${i}, this.innerText)">${val}</div></td>`;
         }
     });
-    html += `<td style="background:#eee; font-weight:normal; font-size:11px;">月總計:</td><td style="background:#eee;">Σ</td>`; 
+    
+    // 補齊備註與可填欄位 (設為空白)
+    html += `<td class="order-cell"></td><td class="order-cell"></td>`; 
     
     if (isStatsVisible) {
-        html += `<td colspan="3" style="background:#95a5a6; color:white;">本月總假次數 →</td>
+        html += `<td colspan="3" class="order-cell" style="text-align:right; font-size:11px; padding-right:5px;">本月合計 →</td>
                  <td class="sum-a">${totalA}</td>
                  <td class="sum-b">${totalB}</td>`;
     }
@@ -209,7 +211,7 @@ function clearMonthContent() {
     const pickerVal = document.getElementById('monthPicker').value;
     if(!pickerVal) return;
     const [year, month] = pickerVal.split('-');
-    if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的所有勤務內容嗎？\n(將清空V班與公假，保留備註與順序)`)) return;
+    if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的所有勤務內容嗎？`)) return;
     db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
         const data = snap.val() || {};
         let updates = {};
@@ -231,7 +233,7 @@ function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
     let updates = {};
-    if(!confirm(`執行帶入？（受訓：一至五A1，六日V班）`)) return;
+    if(!confirm(`執行帶入？`)) return;
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
         const dayIdx = currentDate.getDay(); 
