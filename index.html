@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>四湖分隊雲端預定表 - Firefox 專用修正版</title>
+    <title>四湖分隊雲端預定表 - Firefox 終極鎖定版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -29,33 +29,28 @@
         body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; background: #f8f9fa; }
         .top-bar { display: flex; gap: 8px; padding: 10px; background: white; position: sticky; top: 0; z-index: 1000; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .table-container { overflow: auto; max-height: 85vh; padding: 10px; }
-        table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; }
+        table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; width: auto; }
         th, td { border: 1px solid #ccc; text-align: center; font-size: 13px; height: 38px; min-width: 80px; position: relative; }
         thead th { position: sticky; top: 0; z-index: 100; background: var(--header-dark); color: white; }
+        
         .col-date-fixed { position: sticky; left: 0; z-index: 91; background: white; border-right: 1px solid #333; width: 45px; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; background: white; border-right: 2px solid #333 !important; width: 45px; }
         
-        /* 核心修正：Firefox 鎖定遮罩 */
-        .forbidden-cell { background-color: #dfe4ea !important; }
-        .forbidden-cell::after {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 10;
-            cursor: not-allowed;
-            background: rgba(223, 228, 234, 0.5); /* 半透明灰 */
-        }
+        /* 針對 Firefox 的強力鎖定樣式 */
+        .forbidden-cell { background-color: #d1d8e0 !important; cursor: not-allowed !important; }
+        .forbidden-cell div { pointer-events: none !important; color: #95a5a6 !important; }
 
-        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; }
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
-        .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
+        .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; transition: 0.2s; }
+        .btn:active { transform: scale(0.95); }
+        
         .warning-critical { color: white; background-color: #d63031 !important; font-size: 11px; font-weight: bold; padding: 2px; border-radius: 3px; }
 
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
-        .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; }
         
-        .danger-zone { margin-top: 30px; padding: 20px; border: 3px dashed #eb4d4b; background: #fff5f5; border-radius: 10px; }
+        /* 刪除鍵區域強制顯示 */
+        .danger-zone { margin-top: 40px; padding: 20px; border: 4px dashed #ff7675; background: #fff5f5; border-radius: 10px; display: block !important; }
     </style>
 </head>
 <body>
@@ -83,8 +78,9 @@
     </div>
 
     <div class="danger-zone">
-        <h4 style="color: #d63031; margin: 0 0 10px 0;">🗑️ 刪除與清空區域</h4>
-        <button class="btn" style="background: #d63031; width: 100%; padding: 12px;" onclick="clearMonthContent()">一鍵清空本月勤務內容</button>
+        <h3 style="color: #d63031; margin-top: 0;">🗑️ 系統管理：一鍵清空</h3>
+        <p style="color: #636e72; font-weight: bold;">按下後會刪除本月所有人已填寫的勤務。此動作無法還原！</p>
+        <button class="btn" style="background: #d63031; width: 100%; height: 50px; font-size: 16px;" onclick="clearMonthContent()">🗑️ 確定刪除本月所有內容</button>
     </div>
 </div>
 
@@ -92,14 +88,17 @@
 let staffData = []; 
 let isStatsVisible = false;
 
-// Firefox 強力攔截點擊
-document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('forbidden-cell') || e.target.closest('.forbidden-cell')) {
-        alert("🚨 無法填假：該日人力已低於下限！");
+// --- 這是針對 Firefox 的最強點擊攔截器 ---
+document.addEventListener('mousedown', function(e) {
+    // 尋找被點擊的 td
+    const td = e.target.closest('td');
+    if (td && td.classList.contains('forbidden-cell')) {
         e.preventDefault();
-        e.stopImmediatePropagation();
+        e.stopPropagation();
+        alert("🚨 無法填假：該日人力已低於下限！");
+        return false;
     }
-}, true);
+}, true); // 使用 Capture 模式優先攔截
 
 function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
 function closeAllModals() { document.getElementById('staffModal').style.display = 'none'; document.getElementById('modalOverlay').style.display = 'none'; }
@@ -149,9 +148,9 @@ function renderTable(year, month, data) {
         
         staffData.forEach((s, i) => {
             if(s.name) {
-                const val = rowData['s'+i] || '', cellClass = (val === '公假A1') ? 'status-a1' : '';
-                // 核心：若禁止填假，加上 forbidden-cell 類別
-                html += `<td class="${cellClass} ${isForbidden ? 'forbidden-cell' : ''}">
+                const val = rowData['s'+i] || '';
+                // 若禁填，給予 forbidden-cell 標籤並關閉編輯屬性
+                html += `<td class="${val==='公假A1'?'status-a1':''} ${isForbidden ? 'forbidden-cell' : ''}">
                             <div contenteditable="${!isForbidden}" class="editable-content" onblur="handleManualInput(this)">${val}</div>
                          </td>`;
             }
@@ -178,14 +177,15 @@ function renderTable(year, month, data) {
 }
 
 function clearMonthContent() {
-    if(!confirm("⚠️ 確定清空本月勤務內容？")) return;
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    const pickerVal = document.getElementById('monthPicker').value;
+    if(!confirm("⚠️ 確定要一鍵清空本月勤務內容嗎？此動作不可撤銷！")) return;
+    const [year, month] = pickerVal.split('-');
     db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
         const data = snap.val() || {}, updates = {};
         Object.keys(data).forEach(day => {
             Object.keys(data[day]).forEach(key => { if (key.startsWith('s')) updates[`${day}/${key}`] = ""; });
         });
-        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => { alert("已清空"); closeAllModals(); });
+        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => { alert("本月勤務已清空！"); closeAllModals(); });
     });
 }
 
@@ -203,7 +203,6 @@ function saveRowData(day) {
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     row.querySelectorAll('.editable-content').forEach((el, i) => {
         const td = el.closest('td');
-        // 排除填假順序那列
         if (td && !td.parentElement.innerText.includes("填假順序")) {
             rowObj['s'+i] = el.innerText;
         }
@@ -219,7 +218,7 @@ function saveDayDeduct(day, val) {
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
-    if(!confirm("帶入勤休制度？")) return;
+    if(!confirm("是否帶入全月勤休制度？")) return;
     let updates = {};
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d), dayIdx = currentDate.getDay(); 
