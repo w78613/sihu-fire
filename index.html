@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 人力預警版</title>
+    <title>四湖分隊雲端預定表 - 強制防錯版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -34,11 +34,17 @@
         thead th { position: sticky; top: 0; z-index: 100; background: var(--header-dark); color: white; }
         .col-date-fixed { position: sticky; left: 0; z-index: 91; background: white; border-right: 1px solid #333; width: 45px; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; background: white; border-right: 2px solid #333 !important; width: 45px; }
+        
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
         
+        /* 鎖定狀態樣式 */
+        .locked-cell { background-color: #f2f2f2 !important; cursor: not-allowed !important; color: #bbb; }
+        .editable-content[contenteditable="false"] { pointer-events: none; }
+
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
         .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
         
+        /* 計算欄位顏色 */
         .stat-header { background-color: #455a64 !important; color: white !important; }
         .stat-col { background-color: #ecf0f1; font-weight: bold; color: #2c3e50; }
         .stat-deduct { background-color: #dfe6e9; }
@@ -46,19 +52,18 @@
         .stat-a { background-color: var(--stat-blue) !important; color: white !important; font-weight: bold; }
         .stat-b { background-color: var(--stat-orange) !important; color: white !important; font-weight: bold; }
         
+        /* 填假順序標題 */
         .order-title { background-color: #34495e !important; color: white !important; font-weight: bold; }
         .order-cell { background-color: #f1f4f7 !important; font-weight: bold; }
         .sum-a { background-color: #2980b9 !important; color: white !important; font-size: 15px; font-weight: bold; }
         .sum-b { background-color: #d35400 !important; color: white !important; font-size: 15px; font-weight: bold; }
         
-        /* 負數警告樣式 */
-        .warning-critical { color: white; background-color: #d63031 !important; font-size: 11px; font-weight: bold; padding: 2px; border-radius: 3px; }
+        .warning-critical { color: white; background-color: #d63031 !important; font-size: 11px; font-weight: bold; padding: 2px; border-radius: 3px; display: block; }
         .warning-text { color: #d63031; font-size: 11px; font-weight: bold; }
 
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
-        .danger-zone { margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ddd; }
     </style>
 </head>
 <body>
@@ -79,15 +84,9 @@
 <div id="staffModal">
     <h3>👥 名單與起始日設定</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;"></div>
-    
     <div style="display: flex; gap: 10px; margin-top: 20px;">
         <button class="btn" style="background: #0984e3; flex: 2;" onclick="saveStaffData()">✅ 儲存設定</button>
         <button class="btn" style="background: #636e72; flex: 1;" onclick="closeAllModals()">關閉</button>
-    </div>
-
-    <div class="danger-zone">
-        <p style="color: #d63031; font-size: 13px; margin-bottom: 8px;">⚠️ 危險區域：僅刪除選定月份內人員的勤務內容 (V班、公假等)，保留備註與順序。</p>
-        <button class="btn" style="background: #d63031; width: 100%;" onclick="clearMonthContent()">🗑️ 一鍵清空本月勤務內容</button>
     </div>
 </div>
 
@@ -117,16 +116,12 @@ function renderTable(year, month, data) {
     const deductValues = settings.dayDeducts || {};
     const daysInMonth = new Date(year, month, 0).getDate();
     
-    let totalA = 0; 
-    let totalB = 0; 
+    let totalA = 0, totalB = 0;
     
     let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
     staffData.forEach(s => { if(s.name) html += `<th>${s.name}</th>`; });
     html += `<th>備註</th><th style="min-width:60px;">可填</th>`;
-    
-    if (isStatsVisible) {
-        html += `<th class="stat-header">預計</th><th class="stat-header">預扣</th><th class="stat-header">真實</th><th class="stat-header">A-</th><th class="stat-header">B-</th>`;
-    }
+    if (isStatsVisible) html += `<th class="stat-header">預計</th><th class="stat-header">預扣</th><th class="stat-header">真實</th><th class="stat-header">A-</th><th class="stat-header">B-</th>`;
     html += `</tr></thead><tbody>`;
 
     for (let d = 1; d <= daysInMonth; d++) {
@@ -148,10 +143,10 @@ function renderTable(year, month, data) {
 
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyTotal - deduct;
-        
-        // 邏輯判斷：可填人數
+        const isForbidden = realSlots < 0; // 是否禁止填假
+
         let canLeaveText = "";
-        if (realSlots < 0) {
+        if (isForbidden) {
             canLeaveText = `<span class="warning-critical">無法填假</span>`;
         } else if (realSlots < 5) {
             canLeaveText = `<span class="warning-text">下限</span>`;
@@ -167,7 +162,11 @@ function renderTable(year, month, data) {
             if(s.name) {
                 const val = rowData['s'+i] || '';
                 const cellClass = (val === '公假A1') ? 'status-a1' : '';
-                html += `<td class="${cellClass}"><div contenteditable="true" class="editable-content" onblur="handleManualInput(this)">${val}</div></td>`;
+                const lockedClass = isForbidden ? 'locked-cell' : '';
+                // 如果禁止填假，將 contenteditable 設為 false，並在點擊時觸發警告
+                html += `<td class="${cellClass} ${lockedClass}" onclick="${isForbidden ? "alert('🚨 無法填假：該日人力已低於下限！')" : ''}">
+                            <div contenteditable="${!isForbidden}" class="editable-content" onblur="handleManualInput(this)">${val}</div>
+                         </td>`;
             }
         });
 
@@ -176,11 +175,9 @@ function renderTable(year, month, data) {
         if (isStatsVisible) {
             let showA = (realSlots >= 6 && emptyA > emptyB) ? (realSlots >= 7 ? 2 : 1) : 0;
             let showB = (realSlots >= 6 && emptyB >= emptyA) ? (realSlots >= 7 ? 2 : 1) : 0;
-            totalA += showA;
-            totalB += showB;
-
+            totalA += showA; totalB += showB;
             html += `<td class="stat-col">${emptyTotal}</td>
-                     <td class="stat-deduct"><input type="number" style="width:40px; background:transparent; border:none; text-align:center;" value="${deduct}" onchange="checkAndSaveDeduct(${d}, this.value, ${emptyTotal})"></td>
+                     <td class="stat-deduct"><input type="number" style="width:40px; background:transparent; border:none; text-align:center;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
                      <td class="stat-real">${realSlots}</td>
                      <td class="stat-a">${showA}</td>
                      <td class="stat-b">${showB}</td>`;
@@ -188,33 +185,20 @@ function renderTable(year, month, data) {
         html += `</tr>`;
     }
 
-    html += `<tr>
-        <td class="col-date-fixed order-title" colspan="2">填假順序</td>`;
+    html += `<tr><td class="col-date-fixed order-title" colspan="2">填假順序</td>`;
     staffData.forEach((s, i) => {
         if(s.name) {
             const val = orderData['s'+i] || '';
             html += `<td class="order-cell"><div contenteditable="true" class="editable-content" onblur="saveOrderData(${i}, this.innerText)">${val}</div></td>`;
         }
     });
-    
     html += `<td class="order-cell"></td><td class="order-cell"></td>`; 
-    
     if (isStatsVisible) {
         html += `<td colspan="3" class="order-cell" style="text-align:right; font-size:11px; padding-right:5px;">本月合計 →</td>
-                 <td class="sum-a">${totalA}</td>
-                 <td class="sum-b">${totalB}</td>`;
+                 <td class="sum-a">${totalA}</td><td class="sum-b">${totalB}</td>`;
     }
     html += `</tr></tbody>`;
     document.getElementById('dutyTable').innerHTML = html;
-}
-
-// 增強型儲存：檢查是否超額扣除
-function checkAndSaveDeduct(day, val, emptyTotal) {
-    const deduct = parseInt(val) || 0;
-    if (emptyTotal - deduct < 0) {
-        alert(`🚨 警告：第 ${day} 日剩餘人力不足，無法再扣除/填假！`);
-    }
-    saveDayDeduct(day, val);
 }
 
 function saveOrderData(staffIdx, value) {
@@ -223,26 +207,26 @@ function saveOrderData(staffIdx, value) {
     db.ref(`duty_system/${year}_${month}/order`).update({ ['s' + staffIdx]: value });
 }
 
-function clearMonthContent() {
-    const pickerVal = document.getElementById('monthPicker').value;
-    const [year, month] = pickerVal.split('-');
-    if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的勤務內容嗎？`)) return;
-    db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
-        const data = snap.val() || {};
-        let updates = {};
-        Object.keys(data).forEach(day => {
-            Object.keys(data[day]).forEach(key => {
-                if (key.startsWith('s')) updates[`${day}/${key}`] = "";
-            });
-        });
-        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => {
-            alert("已清空！");
-            closeAllModals();
-        });
+function handleManualInput(cell) { saveRowData(cell.closest('tr').dataset.day); }
+
+function saveRowData(day) {
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    const row = document.querySelector(`tr[data-day="${day}"]`);
+    if(!row) return;
+    const rowObj = { note: row.querySelector('.note-cell').innerText };
+    row.querySelectorAll('.editable-content').forEach((el, i) => {
+        // 只有非「填假順序」的格子才存入勤務內容
+        if (!el.closest('td').classList.contains('order-cell')) {
+            rowObj['s'+i] = el.innerText;
+        }
     });
+    db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
 }
 
-function handleManualInput(cell) { saveRowData(cell.closest('tr').dataset.day); }
+function saveDayDeduct(day, val) {
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
+}
 
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
@@ -277,20 +261,6 @@ function applyDutyCycle() {
         });
     }
     db.ref(`duty_system/${year}_${month}/content`).update(updates);
-}
-
-function saveRowData(day) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
-    const row = document.querySelector(`tr[data-day="${day}"]`);
-    if(!row) return;
-    const rowObj = { note: row.querySelector('.note-cell').innerText };
-    row.querySelectorAll('.editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
-    db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
-}
-
-function saveDayDeduct(day, val) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
-    db.ref(`duty_system/${year}_${month}/settings/dayDeducts`).update({ [day]: val });
 }
 
 function toggleStaffModal() {
