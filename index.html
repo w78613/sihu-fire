@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 清空功能版</title>
+    <title>四湖分隊雲端預定表 - 色彩優化版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -35,13 +35,23 @@
         .col-date-fixed { position: sticky; left: 0; z-index: 91; background: white; border-right: 1px solid #333; width: 45px; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; background: white; border-right: 2px solid #333 !important; width: 45px; }
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
+        
+        /* 狀態顏色 */
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
         .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
-        .stat-col { background-color: #eee; font-weight: bold; }
-        .stat-a { background-color: #e3f2fd !important; }
-        .stat-b { background-color: #fff3e0 !important; }
+        
+        /* 計算欄位色彩優化 */
+        .stat-header { background-color: #455a64 !important; color: white !important; } /* 統計區深色標題 */
+        .stat-col { background-color: #ecf0f1; font-weight: bold; color: #2c3e50; border-left: 2px solid #7f8c8d; } /* 預計列 */
+        .stat-deduct { background-color: #dfe6e9; } /* 預扣列 */
+        .stat-real { background-color: #d1d8e0; color: #d35400; font-weight: 900; } /* 真實列 (橘色粗體) */
+        .stat-a { background-color: #3498db !important; color: white !important; font-weight: bold; } /* A- 藍色 */
+        .stat-b { background-color: #e67e22 !important; color: white !important; font-weight: bold; } /* B- 橘色 */
+        
         .warning-text { color: red; font-size: 11px; font-weight: bold; }
-        .order-row { background-color: #f1f2f6; font-weight: bold; }
+        .order-row { background-color: #dcdde1; font-weight: bold; }
+        
+        /* Modal 樣式 */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
@@ -109,7 +119,7 @@ function renderTable(year, month, data) {
     html += `<th>備註</th><th style="min-width:60px;">可填</th>`;
     
     if (isStatsVisible) {
-        html += `<th class="stat-col">預計</th><th class="stat-col">預扣</th><th class="stat-col">真實</th><th class="stat-a">A-</th><th class="stat-b">B-</th>`;
+        html += `<th class="stat-header">預計</th><th class="stat-header">預扣</th><th class="stat-header">真實</th><th class="stat-header">A-</th><th class="stat-header">B-</th>`;
     }
     html += `</tr></thead><tbody>`;
 
@@ -153,17 +163,17 @@ function renderTable(year, month, data) {
             let showA = (realSlots >= 6 && emptyA > emptyB) ? (realSlots >= 7 ? 2 : 1) : 0;
             let showB = (realSlots >= 6 && emptyB >= emptyA) ? (realSlots >= 7 ? 2 : 1) : 0;
             html += `<td class="stat-col">${emptyTotal}</td>
-                     <td class="stat-col"><input type="number" style="width:40px;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
-                     <td class="stat-col">${realSlots}</td>
+                     <td class="stat-deduct"><input type="number" style="width:40px; background:transparent; border:none; text-align:center;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
+                     <td class="stat-real">${realSlots}</td>
                      <td class="stat-a">${showA}</td>
                      <td class="stat-b">${showB}</td>`;
         }
         html += `</tr>`;
     }
 
-    // 填假順序
+    // 填假順序列
     html += `<tr class="order-row">
-        <td class="col-date-fixed" colspan="2" style="background:#f1f2f6;">填假順序</td>`;
+        <td class="col-date-fixed" colspan="2" style="background:#bdc3c7;">填假順序</td>`;
     staffData.forEach((s, i) => {
         if(s.name) {
             const val = orderData['s'+i] || '';
@@ -171,7 +181,7 @@ function renderTable(year, month, data) {
         }
     });
     html += `<td></td><td></td>`; 
-    if (isStatsVisible) html += `<td colspan="5"></td>`;
+    if (isStatsVisible) html += `<td colspan="5" style="background:#95a5a6;"></td>`;
     html += `</tr></tbody>`;
     document.getElementById('dutyTable').innerHTML = html;
 }
@@ -182,34 +192,24 @@ function saveOrderData(staffIdx, value) {
     db.ref(`duty_system/${year}_${month}/order`).update({ ['s' + staffIdx]: value });
 }
 
-// ==========================================
-// 新增：一鍵清空功能
-// ==========================================
 function clearMonthContent() {
     const pickerVal = document.getElementById('monthPicker').value;
     if(!pickerVal) return;
     const [year, month] = pickerVal.split('-');
-
     if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的所有勤務內容嗎？\n(將清空V班與公假，保留備註與順序)`)) return;
 
     db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
         const data = snap.val() || {};
         let updates = {};
-
-        // 遍歷每一天，只清空人員格子 (s0, s1...)，保留 note (備註)
         Object.keys(data).forEach(day => {
             Object.keys(data[day]).forEach(key => {
-                if (key.startsWith('s')) {
-                    updates[`${day}/${key}`] = "";
-                }
+                if (key.startsWith('s')) updates[`${day}/${key}`] = "";
             });
         });
-
-        db.ref(`duty_system/${year}_${month}/content`).update(updates)
-          .then(() => {
-              alert("勤務內容已成功清空！");
-              closeAllModals();
-          });
+        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => {
+            alert("勤務內容已成功清空！");
+            closeAllModals();
+        });
     });
 }
 
