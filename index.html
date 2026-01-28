@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 強制防錯版</title>
+    <title>四湖分隊雲端預定表 - 完整修正版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -37,14 +37,13 @@
         
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
         
-        /* 鎖定狀態樣式 */
-        .locked-cell { background-color: #f2f2f2 !important; cursor: not-allowed !important; color: #bbb; }
-        .editable-content[contenteditable="false"] { pointer-events: none; }
+        /* 鎖定狀態：變灰且滑鼠指標變為禁止 */
+        .locked-cell { background-color: #f2f2f2 !important; cursor: not-allowed !important; }
+        .locked-cell .editable-content { pointer-events: none; color: #bbb; }
 
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
         .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
         
-        /* 計算欄位顏色 */
         .stat-header { background-color: #455a64 !important; color: white !important; }
         .stat-col { background-color: #ecf0f1; font-weight: bold; color: #2c3e50; }
         .stat-deduct { background-color: #dfe6e9; }
@@ -52,7 +51,6 @@
         .stat-a { background-color: var(--stat-blue) !important; color: white !important; font-weight: bold; }
         .stat-b { background-color: var(--stat-orange) !important; color: white !important; font-weight: bold; }
         
-        /* 填假順序標題 */
         .order-title { background-color: #34495e !important; color: white !important; font-weight: bold; }
         .order-cell { background-color: #f1f4f7 !important; font-weight: bold; }
         .sum-a { background-color: #2980b9 !important; color: white !important; font-size: 15px; font-weight: bold; }
@@ -64,6 +62,7 @@
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
+        .danger-zone { margin-top: 20px; padding-top: 15px; border-top: 2px dashed #d63031; }
     </style>
 </head>
 <body>
@@ -84,9 +83,16 @@
 <div id="staffModal">
     <h3>👥 名單與起始日設定</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;"></div>
+    
     <div style="display: flex; gap: 10px; margin-top: 20px;">
         <button class="btn" style="background: #0984e3; flex: 2;" onclick="saveStaffData()">✅ 儲存設定</button>
         <button class="btn" style="background: #636e72; flex: 1;" onclick="closeAllModals()">關閉</button>
+    </div>
+
+    <div class="danger-zone">
+        <p style="color: #d63031; font-size: 13px; font-weight: bold;">⚠️ 危險區域</p>
+        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">僅刪除選定月份內人員的勤務內容 (V班、公假等)，保留備註與順序。</p>
+        <button class="btn" style="background: #d63031; width: 100%;" onclick="clearMonthContent()">🗑️ 一鍵清空本月勤務內容</button>
     </div>
 </div>
 
@@ -143,7 +149,7 @@ function renderTable(year, month, data) {
 
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyTotal - deduct;
-        const isForbidden = realSlots < 0; // 是否禁止填假
+        const isForbidden = realSlots < 0; 
 
         let canLeaveText = "";
         if (isForbidden) {
@@ -163,8 +169,8 @@ function renderTable(year, month, data) {
                 const val = rowData['s'+i] || '';
                 const cellClass = (val === '公假A1') ? 'status-a1' : '';
                 const lockedClass = isForbidden ? 'locked-cell' : '';
-                // 如果禁止填假，將 contenteditable 設為 false，並在點擊時觸發警告
-                html += `<td class="${cellClass} ${lockedClass}" onclick="${isForbidden ? "alert('🚨 無法填假：該日人力已低於下限！')" : ''}">
+                // 修正：當 isForbidden 為 true，點擊 td 直接觸發警告
+                html += `<td class="${cellClass} ${lockedClass}" ${isForbidden ? 'onclick="alert(\'🚨 無法填假：該日人力已低於下限！\')"' : ''}>
                             <div contenteditable="${!isForbidden}" class="editable-content" onblur="handleManualInput(this)">${val}</div>
                          </td>`;
             }
@@ -201,6 +207,27 @@ function renderTable(year, month, data) {
     document.getElementById('dutyTable').innerHTML = html;
 }
 
+function clearMonthContent() {
+    const pickerVal = document.getElementById('monthPicker').value;
+    if(!pickerVal) return;
+    const [year, month] = pickerVal.split('-');
+    if(!confirm(`⚠️ 警告：確定要清空 ${year}年${month}月 的所有勤務內容嗎？\n(V班、公假將被刪除，保留備註與順序)`)) return;
+    
+    db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
+        const data = snap.val() || {};
+        let updates = {};
+        Object.keys(data).forEach(day => {
+            Object.keys(data[day]).forEach(key => {
+                if (key.startsWith('s')) updates[`${day}/${key}`] = "";
+            });
+        });
+        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => {
+            alert("本月勤務內容已清空！");
+            closeAllModals();
+        });
+    });
+}
+
 function saveOrderData(staffIdx, value) {
     const pickerVal = document.getElementById('monthPicker').value;
     const [year, month] = pickerVal.split('-');
@@ -215,7 +242,6 @@ function saveRowData(day) {
     if(!row) return;
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     row.querySelectorAll('.editable-content').forEach((el, i) => {
-        // 只有非「填假順序」的格子才存入勤務內容
         if (!el.closest('td').classList.contains('order-cell')) {
             rowObj['s'+i] = el.innerText;
         }
