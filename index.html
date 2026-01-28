@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 強制防呆版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>四湖分隊雲端預定表 - Firefox 專用修正版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -25,31 +25,37 @@
     </script>
 
     <style>
-        :root { --header-dark: #2c3e50; --stat-blue: #3498db; --stat-orange: #e67e22; }
+        :root { --header-dark: #2c3e50; }
         body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; background: #f8f9fa; }
-        .top-bar { display: flex; gap: 8px; padding: 10px; background: white; position: sticky; top: 0; z-index: 1000; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); flex-wrap: wrap; }
+        .top-bar { display: flex; gap: 8px; padding: 10px; background: white; position: sticky; top: 0; z-index: 1000; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .table-container { overflow: auto; max-height: 85vh; padding: 10px; }
         table { border-collapse: separate; border-spacing: 0; background: white; border: 2px solid #333; }
-        th, td { border: 1px solid #ccc; text-align: center; font-size: 13px; height: 38px; min-width: 80px; }
+        th, td { border: 1px solid #ccc; text-align: center; font-size: 13px; height: 38px; min-width: 80px; position: relative; }
         thead th { position: sticky; top: 0; z-index: 100; background: var(--header-dark); color: white; }
         .col-date-fixed { position: sticky; left: 0; z-index: 91; background: white; border-right: 1px solid #333; width: 45px; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; background: white; border-right: 2px solid #333 !important; width: 45px; }
-        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; }
         
-        /* 鎖定行樣式 */
-        tr.forbidden-row td { background-color: #dfe4ea !important; color: #a4b0be !important; cursor: not-allowed !important; }
-        tr.forbidden-row .editable-content { pointer-events: none; } /* 禁止內部編輯 */
+        /* 核心修正：Firefox 鎖定遮罩 */
+        .forbidden-cell { background-color: #dfe4ea !important; }
+        .forbidden-cell::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10;
+            cursor: not-allowed;
+            background: rgba(223, 228, 234, 0.5); /* 半透明灰 */
+        }
 
+        .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; }
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
-        .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
+        .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; }
         .warning-critical { color: white; background-color: #d63031 !important; font-size: 11px; font-weight: bold; padding: 2px; border-radius: 3px; }
 
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
-        .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
+        .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; }
         
-        /* 刪除按鈕專用區 */
-        .danger-zone { margin-top: 30px; padding: 20px; border: 3px dashed #eb4d4b; background: #fff5f5; border-radius: 10px; text-align: center; }
+        .danger-zone { margin-top: 30px; padding: 20px; border: 3px dashed #eb4d4b; background: #fff5f5; border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -77,9 +83,8 @@
     </div>
 
     <div class="danger-zone">
-        <h4 style="color: #d63031; margin-top: 0;">🗑️ 刪除與清空區域</h4>
-        <p style="font-size: 13px; color: #555;">注意：點擊下方按鈕將「清空本月所有人」填寫的內容。</p>
-        <button class="btn" style="background: #d63031; width: 100%; padding: 15px;" onclick="clearMonthContent()">一鍵清空本月勤務內容</button>
+        <h4 style="color: #d63031; margin: 0 0 10px 0;">🗑️ 刪除與清空區域</h4>
+        <button class="btn" style="background: #d63031; width: 100%; padding: 12px;" onclick="clearMonthContent()">一鍵清空本月勤務內容</button>
     </div>
 </div>
 
@@ -87,20 +92,12 @@
 let staffData = []; 
 let isStatsVisible = false;
 
-// --- 強力警告點擊監聽 ---
-document.getElementById('dutyTable').addEventListener('mousedown', function(e) {
-    const targetTd = e.target.closest('td');
-    if (!targetTd) return;
-    const parentRow = targetTd.closest('tr');
-    // 如果點擊的是人員格子，且該行標記為 forbidden-row
-    if (parentRow && parentRow.classList.contains('forbidden-row')) {
-        const cellIndex = targetTd.cellIndex;
-        // 排除日期、星期、備註、可填與計算欄位 (前兩格與後幾格不鎖)
-        if (cellIndex >= 2 && cellIndex < 2 + staffData.filter(s => s.name).length) {
-            alert("🚨 無法填假：該日人力已低於下限！");
-            e.preventDefault();
-            e.stopPropagation();
-        }
+// Firefox 強力攔截點擊
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('forbidden-cell') || e.target.closest('.forbidden-cell')) {
+        alert("🚨 無法填假：該日人力已低於下限！");
+        e.preventDefault();
+        e.stopImmediatePropagation();
     }
 }, true);
 
@@ -129,7 +126,7 @@ function renderTable(year, month, data) {
     let totalA = 0, totalB = 0, html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
     staffData.forEach(s => { if(s.name) html += `<th>${s.name}</th>`; });
     html += `<th>備註</th><th style="min-width:60px;">可填</th>`;
-    if (isStatsVisible) html += `<th class="stat-header">預計</th><th class="stat-header">預扣</th><th class="stat-header">真實</th><th class="stat-header">A-</th><th class="stat-header">B-</th>`;
+    if (isStatsVisible) html += `<th>預計</th><th>預扣</th><th>真實</th><th>A-</th><th>B-</th>`;
     html += `</tr></thead><tbody>`;
 
     for (let d = 1; d <= daysInMonth; d++) {
@@ -146,15 +143,17 @@ function renderTable(year, month, data) {
         const deduct = parseInt(deductValues[d] || 0), realSlots = emptyTotal - deduct, isForbidden = realSlots < 0;
         let canLeaveText = isForbidden ? `<span class="warning-critical">無法填假</span>` : (realSlots < 5 ? `下限` : (realSlots >= 7 ? "2" : (realSlots === 6 ? "1" : "0")));
 
-        // 如果禁止填假，對 <tr> 加上 forbidden-row 類別
-        html += `<tr data-day="${d}" class="${isForbidden ? 'forbidden-row' : ''}">
+        html += `<tr data-day="${d}">
             <td class="col-date-fixed">${d}</td>
             <td class="col-week-fixed">${["日","一","二","三","四","五","六"][dayIdx]}</td>`;
         
         staffData.forEach((s, i) => {
             if(s.name) {
                 const val = rowData['s'+i] || '', cellClass = (val === '公假A1') ? 'status-a1' : '';
-                html += `<td class="${cellClass}"><div contenteditable="${!isForbidden}" class="editable-content" onblur="handleManualInput(this)">${val}</div></td>`;
+                // 核心：若禁止填假，加上 forbidden-cell 類別
+                html += `<td class="${cellClass} ${isForbidden ? 'forbidden-cell' : ''}">
+                            <div contenteditable="${!isForbidden}" class="editable-content" onblur="handleManualInput(this)">${val}</div>
+                         </td>`;
             }
         });
 
@@ -163,14 +162,14 @@ function renderTable(year, month, data) {
             let showA = (realSlots >= 6 && emptyA > emptyB) ? (realSlots >= 7 ? 2 : 1) : 0;
             let showB = (realSlots >= 6 && emptyB >= emptyA) ? (realSlots >= 7 ? 2 : 1) : 0;
             totalA += showA; totalB += showB;
-            html += `<td>${emptyTotal}</td><td><input type="number" style="width:40px;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td><td class="stat-real">${realSlots}</td><td>${showA}</td><td>${showB}</td>`;
+            html += `<td>${emptyTotal}</td><td><input type="number" style="width:40px;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td><td>${realSlots}</td><td>${showA}</td><td>${showB}</td>`;
         }
         html += `</tr>`;
     }
 
-    html += `<tr><td class="col-date-fixed order-title" colspan="2">填假順序</td>`;
+    html += `<tr><td class="col-date-fixed" colspan="2" style="background:#34495e; color:white;">填假順序</td>`;
     staffData.forEach((s, i) => {
-        if(s.name) html += `<td class="order-cell"><div contenteditable="true" class="editable-content" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</div></td>`;
+        if(s.name) html += `<td style="background:#f1f4f7;"><div contenteditable="true" class="editable-content" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</div></td>`;
     });
     html += `<td colspan="2"></td>`;
     if (isStatsVisible) html += `<td colspan="3">合計</td><td>${totalA}</td><td>${totalB}</td>`;
@@ -179,9 +178,8 @@ function renderTable(year, month, data) {
 }
 
 function clearMonthContent() {
-    const pickerVal = document.getElementById('monthPicker').value;
-    if(!confirm(`⚠️ 確定要一鍵清空本月勤務嗎？`)) return;
-    const [year, month] = pickerVal.split('-');
+    if(!confirm("⚠️ 確定清空本月勤務內容？")) return;
+    const [year, month] = document.getElementById('monthPicker').value.split('-');
     db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
         const data = snap.val() || {}, updates = {};
         Object.keys(data).forEach(day => {
@@ -204,7 +202,11 @@ function saveRowData(day) {
     if(!row) return;
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     row.querySelectorAll('.editable-content').forEach((el, i) => {
-        if (!el.closest('td').classList.contains('order-cell')) rowObj['s'+i] = el.innerText;
+        const td = el.closest('td');
+        // 排除填假順序那列
+        if (td && !td.parentElement.innerText.includes("填假順序")) {
+            rowObj['s'+i] = el.innerText;
+        }
     });
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
 }
@@ -217,7 +219,7 @@ function saveDayDeduct(day, val) {
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
-    if(!confirm(`執行勤休制度帶入？`)) return;
+    if(!confirm("帶入勤休制度？")) return;
     let updates = {};
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d), dayIdx = currentDate.getDay(); 
@@ -245,7 +247,7 @@ function toggleStaffModal() {
             <span>人員 ${i+1}</span>
             <input type="text" placeholder="姓名" value="${s.name}" id="name${i}">
             <input type="date" value="${s.startDate || ''}" id="date${i}">
-            <label><input type="checkbox" id="train${i}" ${s.isTraining ? 'checked' : ''}> 長期受訓</label>
+            <label><input type="checkbox" id="train${i}" ${s.isTraining ? 'checked' : ''}> 受訓</label>
         </div>`;
     }).join('');
     document.getElementById('staffModal').style.display = 'block';
