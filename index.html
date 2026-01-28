@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 統計功能整合版</title>
+    <title>四湖分隊雲端預定表 - 填假順序整合版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -41,6 +41,7 @@
         .stat-a { background-color: #e3f2fd !important; }
         .stat-b { background-color: #fff3e0 !important; }
         .warning-text { color: red; font-size: 11px; font-weight: bold; }
+        .order-row { background-color: #f1f2f6; font-weight: bold; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
@@ -89,6 +90,7 @@ function initTable() {
 function renderTable(year, month, data) {
     const savedData = data.content || {};
     const settings = data.settings || {};
+    const orderData = data.order || {}; // 新增：讀取填假順序
     const deductValues = settings.dayDeducts || {};
     const daysInMonth = new Date(year, month, 0).getDate();
     
@@ -101,11 +103,11 @@ function renderTable(year, month, data) {
     }
     html += `</tr></thead><tbody>`;
 
+    // 渲染每日數據
     for (let d = 1; d <= daysInMonth; d++) {
         const date = new Date(year, month - 1, d);
         const dayIdx = date.getDay();
         const rowData = savedData[d] || {};
-        const isWeekend = (dayIdx === 0 || dayIdx === 6);
         
         let emptyTotal = 0, emptyA = 0, emptyB = 0;
         staffData.forEach((s, i) => {
@@ -153,8 +155,36 @@ function renderTable(year, month, data) {
         html += `</tr>`;
     }
 
+    // ==========================================
+    // 新增：最底部的「填假順序」列
+    // ==========================================
+    html += `<tr class="order-row">
+        <td class="col-date-fixed" colspan="2" style="background:#f1f2f6;">填假順序</td>`;
+    
+    staffData.forEach((s, i) => {
+        if(s.name) {
+            const val = orderData['s'+i] || '';
+            html += `<td><div contenteditable="true" class="editable-content" onblur="saveOrderData(${i}, this.innerText)">${val}</div></td>`;
+        }
+    });
+
+    // 補齊備註與可填欄位之後的格子
+    html += `<td></td><td></td>`; 
+    if (isStatsVisible) html += `<td colspan="5"></td>`;
+    html += `</tr>`;
+
     html += `</tbody>`;
     document.getElementById('dutyTable').innerHTML = html;
+}
+
+// 儲存填假順序函數
+function saveOrderData(staffIdx, value) {
+    const pickerVal = document.getElementById('monthPicker').value;
+    if(!pickerVal) return;
+    const [year, month] = pickerVal.split('-');
+    db.ref(`duty_system/${year}_${month}/order`).update({
+        ['s' + staffIdx]: value
+    });
 }
 
 function handleManualInput(cell) { saveRowData(cell.closest('tr').dataset.day); }
@@ -168,13 +198,12 @@ function applyDutyCycle() {
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
         const dayIdx = currentDate.getDay(); 
-        const isWeekend = (dayIdx === 0 || dayIdx === 6);
         let vCounter = 1; 
         
         staffData.forEach((s, i) => {
             if(s.name) {
                 let shouldOff = false;
-                if (s.isTraining && isWeekend) {
+                if (s.isTraining && (dayIdx === 0 || dayIdx === 6)) {
                     shouldOff = true;
                 } else if (s.startDate) {
                     const start = new Date(s.startDate);
@@ -188,9 +217,9 @@ function applyDutyCycle() {
                 if (shouldOff) {
                     let vLabel = (vCounter <= 9) ? `V${vCounter}` : "休假";
                     vCounter++;
-                    updates[`${d}/s${i}`] = (s.isTraining && !isWeekend) ? "公假A1" : vLabel;
+                    updates[`${d}/s${i}`] = (s.isTraining && dayIdx !== 0 && dayIdx !== 6) ? "公假A1" : vLabel;
                 } else {
-                    updates[`${d}/s${i}`] = (s.isTraining && !isWeekend) ? "公假A1" : "";
+                    updates[`${d}/s${i}`] = (s.isTraining && dayIdx !== 0 && dayIdx !== 6) ? "公假A1" : "";
                 }
             }
         });
@@ -201,6 +230,7 @@ function applyDutyCycle() {
 function saveRowData(day) {
     const [year, month] = document.getElementById('monthPicker').value.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
+    if(!row) return;
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     row.querySelectorAll('.editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
