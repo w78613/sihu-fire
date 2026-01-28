@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 下月預設版</title>
+    <title>四湖分隊雲端預定表 - 人力預警版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -51,7 +51,10 @@
         .sum-a { background-color: #2980b9 !important; color: white !important; font-size: 15px; font-weight: bold; }
         .sum-b { background-color: #d35400 !important; color: white !important; font-size: 15px; font-weight: bold; }
         
-        .warning-text { color: red; font-size: 11px; font-weight: bold; }
+        /* 負數警告樣式 */
+        .warning-critical { color: white; background-color: #d63031 !important; font-size: 11px; font-weight: bold; padding: 2px; border-radius: 3px; }
+        .warning-text { color: #d63031; font-size: 11px; font-weight: bold; }
+
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
@@ -145,8 +148,16 @@ function renderTable(year, month, data) {
 
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyTotal - deduct;
-        let canLeaveText = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : "X"));
-        if (realSlots < 5) canLeaveText = `<span class="warning-text">下限</span>`;
+        
+        // 邏輯判斷：可填人數
+        let canLeaveText = "";
+        if (realSlots < 0) {
+            canLeaveText = `<span class="warning-critical">無法填假</span>`;
+        } else if (realSlots < 5) {
+            canLeaveText = `<span class="warning-text">下限</span>`;
+        } else {
+            canLeaveText = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : "0");
+        }
 
         html += `<tr data-day="${d}">
             <td class="col-date-fixed" style="color:${dayIdx===0?'red':(dayIdx===6?'#e67e22':'#333')}">${d}</td>
@@ -169,7 +180,7 @@ function renderTable(year, month, data) {
             totalB += showB;
 
             html += `<td class="stat-col">${emptyTotal}</td>
-                     <td class="stat-deduct"><input type="number" style="width:40px; background:transparent; border:none; text-align:center;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
+                     <td class="stat-deduct"><input type="number" style="width:40px; background:transparent; border:none; text-align:center;" value="${deduct}" onchange="checkAndSaveDeduct(${d}, this.value, ${emptyTotal})"></td>
                      <td class="stat-real">${realSlots}</td>
                      <td class="stat-a">${showA}</td>
                      <td class="stat-b">${showB}</td>`;
@@ -197,6 +208,15 @@ function renderTable(year, month, data) {
     document.getElementById('dutyTable').innerHTML = html;
 }
 
+// 增強型儲存：檢查是否超額扣除
+function checkAndSaveDeduct(day, val, emptyTotal) {
+    const deduct = parseInt(val) || 0;
+    if (emptyTotal - deduct < 0) {
+        alert(`🚨 警告：第 ${day} 日剩餘人力不足，無法再扣除/填假！`);
+    }
+    saveDayDeduct(day, val);
+}
+
 function saveOrderData(staffIdx, value) {
     const pickerVal = document.getElementById('monthPicker').value;
     const [year, month] = pickerVal.split('-');
@@ -205,9 +225,8 @@ function saveOrderData(staffIdx, value) {
 
 function clearMonthContent() {
     const pickerVal = document.getElementById('monthPicker').value;
-    if(!pickerVal) return;
     const [year, month] = pickerVal.split('-');
-    if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的所有勤務內容嗎？`)) return;
+    if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的勤務內容嗎？`)) return;
     db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
         const data = snap.val() || {};
         let updates = {};
@@ -217,7 +236,7 @@ function clearMonthContent() {
             });
         });
         db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => {
-            alert("勤務內容已成功清空！");
+            alert("已清空！");
             closeAllModals();
         });
     });
@@ -228,8 +247,8 @@ function handleManualInput(cell) { saveRowData(cell.closest('tr').dataset.day); 
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
-    let updates = {};
     if(!confirm(`執行帶入？`)) return;
+    let updates = {};
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
         const currentDate = new Date(year, month - 1, d);
         const dayIdx = currentDate.getDay(); 
@@ -302,17 +321,11 @@ function saveStaffData() {
 
 function exportToExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("dutyTable")), `四湖預定表.xlsx`); }
 
-// ==========================================
-// 修改後的初始化邏輯：預設開啟下個月
-// ==========================================
 (function(){
     const now = new Date();
-    // 設定到下個月：如果現在 1 月，則為 2 月；如果現在 12 月，則為明年 1 月
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    
     const y = nextMonth.getFullYear();
     const m = String(nextMonth.getMonth() + 1).padStart(2, '0');
-    
     document.getElementById('monthPicker').value = `${y}-${m}`;
     initTable();
 })();
