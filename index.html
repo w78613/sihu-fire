@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 完整修正版</title>
+    <title>四湖分隊雲端預定表 - 最終修正版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -34,12 +34,11 @@
         thead th { position: sticky; top: 0; z-index: 100; background: var(--header-dark); color: white; }
         .col-date-fixed { position: sticky; left: 0; z-index: 91; background: white; border-right: 1px solid #333; width: 45px; }
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; background: white; border-right: 2px solid #333 !important; width: 45px; }
-        
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
         
-        /* 鎖定狀態：變灰且滑鼠指標變為禁止 */
-        .locked-cell { background-color: #f2f2f2 !important; cursor: not-allowed !important; }
-        .locked-cell .editable-content { pointer-events: none; color: #bbb; }
+        /* 鎖定樣式：背景變灰，點擊時觸發警告 */
+        .locked-cell { background-color: #e0e0e0 !important; cursor: not-allowed !important; }
+        .locked-cell * { pointer-events: none; } /* 讓內部 div 不阻擋 td 的點擊事件 */
 
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
         .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
@@ -62,7 +61,7 @@
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
-        .danger-zone { margin-top: 20px; padding-top: 15px; border-top: 2px dashed #d63031; }
+        .danger-zone { margin-top: 25px; padding: 15px; border-top: 3px double #d63031; background: #fff5f5; border-radius: 5px; }
     </style>
 </head>
 <body>
@@ -90,9 +89,9 @@
     </div>
 
     <div class="danger-zone">
-        <p style="color: #d63031; font-size: 13px; font-weight: bold;">⚠️ 危險區域</p>
-        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">僅刪除選定月份內人員的勤務內容 (V班、公假等)，保留備註與順序。</p>
-        <button class="btn" style="background: #d63031; width: 100%;" onclick="clearMonthContent()">🗑️ 一鍵清空本月勤務內容</button>
+        <strong style="color: #d63031;">🗑️ 危險區域</strong>
+        <p style="font-size: 12px; color: #555; margin: 5px 0 10px 0;">點擊後將清空本月所有人員的勤務（V1、公假等），操作不可復原。</p>
+        <button class="btn" style="background: #d63031; width: 100%;" onclick="clearMonthContent()">一鍵清空本月勤務內容</button>
     </div>
 </div>
 
@@ -122,24 +121,18 @@ function renderTable(year, month, data) {
     const deductValues = settings.dayDeducts || {};
     const daysInMonth = new Date(year, month, 0).getDate();
     
-    let totalA = 0, totalB = 0;
-    
-    let html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
+    let totalA = 0, totalB = 0, html = `<thead><tr><th class="col-date-fixed">日期</th><th class="col-week-fixed">星期</th>`;
     staffData.forEach(s => { if(s.name) html += `<th>${s.name}</th>`; });
     html += `<th>備註</th><th style="min-width:60px;">可填</th>`;
     if (isStatsVisible) html += `<th class="stat-header">預計</th><th class="stat-header">預扣</th><th class="stat-header">真實</th><th class="stat-header">A-</th><th class="stat-header">B-</th>`;
     html += `</tr></thead><tbody>`;
 
     for (let d = 1; d <= daysInMonth; d++) {
-        const date = new Date(year, month - 1, d);
-        const dayIdx = date.getDay();
-        const rowData = savedData[d] || {};
-        
+        const date = new Date(year, month - 1, d), dayIdx = date.getDay(), rowData = savedData[d] || {};
         let emptyTotal = 0, emptyA = 0, emptyB = 0;
         staffData.forEach((s, i) => {
             if (s.name) {
-                const val = (rowData['s'+i] || "").trim();
-                if (val === "") {
+                if ((rowData['s'+i] || "").trim() === "") {
                     emptyTotal++;
                     if (i >= 3 && i <= 7) emptyA++;
                     if (i >= 8 && i <= 13) emptyB++;
@@ -147,18 +140,8 @@ function renderTable(year, month, data) {
             }
         });
 
-        const deduct = parseInt(deductValues[d] || 0);
-        const realSlots = emptyTotal - deduct;
-        const isForbidden = realSlots < 0; 
-
-        let canLeaveText = "";
-        if (isForbidden) {
-            canLeaveText = `<span class="warning-critical">無法填假</span>`;
-        } else if (realSlots < 5) {
-            canLeaveText = `<span class="warning-text">下限</span>`;
-        } else {
-            canLeaveText = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : "0");
-        }
+        const deduct = parseInt(deductValues[d] || 0), realSlots = emptyTotal - deduct, isForbidden = realSlots < 0;
+        let canLeaveText = isForbidden ? `<span class="warning-critical">無法填假</span>` : (realSlots < 5 ? `<span class="warning-text">下限</span>` : (realSlots >= 7 ? "2" : (realSlots === 6 ? "1" : "0")));
 
         html += `<tr data-day="${d}">
             <td class="col-date-fixed" style="color:${dayIdx===0?'red':(dayIdx===6?'#e67e22':'#333')}">${d}</td>
@@ -166,43 +149,39 @@ function renderTable(year, month, data) {
         
         staffData.forEach((s, i) => {
             if(s.name) {
-                const val = rowData['s'+i] || '';
-                const cellClass = (val === '公假A1') ? 'status-a1' : '';
-                const lockedClass = isForbidden ? 'locked-cell' : '';
-                // 修正：當 isForbidden 為 true，點擊 td 直接觸發警告
-                html += `<td class="${cellClass} ${lockedClass}" ${isForbidden ? 'onclick="alert(\'🚨 無法填假：該日人力已低於下限！\')"' : ''}>
-                            <div contenteditable="${!isForbidden}" class="editable-content" onblur="handleManualInput(this)">${val}</div>
-                         </td>`;
+                const val = rowData['s'+i] || '', cellClass = (val === '公假A1') ? 'status-a1' : '';
+                if (isForbidden) {
+                    // 鎖定狀態：直接在 td 層級攔截點擊並彈窗
+                    html += `<td class="${cellClass} locked-cell" onclick="alert('🚨 無法填假：該日人力已低於下限！')">
+                                <div class="editable-content">${val}</div>
+                             </td>`;
+                } else {
+                    html += `<td class="${cellClass}">
+                                <div contenteditable="true" class="editable-content" onblur="handleManualInput(this)">${val}</div>
+                             </td>`;
+                }
             }
         });
 
         html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td><td>${canLeaveText}</td>`;
-        
         if (isStatsVisible) {
             let showA = (realSlots >= 6 && emptyA > emptyB) ? (realSlots >= 7 ? 2 : 1) : 0;
             let showB = (realSlots >= 6 && emptyB >= emptyA) ? (realSlots >= 7 ? 2 : 1) : 0;
             totalA += showA; totalB += showB;
             html += `<td class="stat-col">${emptyTotal}</td>
                      <td class="stat-deduct"><input type="number" style="width:40px; background:transparent; border:none; text-align:center;" value="${deduct}" onchange="saveDayDeduct(${d}, this.value)"></td>
-                     <td class="stat-real">${realSlots}</td>
-                     <td class="stat-a">${showA}</td>
-                     <td class="stat-b">${showB}</td>`;
+                     <td class="stat-real">${realSlots}</td><td class="stat-a">${showA}</td><td class="stat-b">${showB}</td>`;
         }
         html += `</tr>`;
     }
 
+    // 填假順序 (保持優化顏色，無統計符號)
     html += `<tr><td class="col-date-fixed order-title" colspan="2">填假順序</td>`;
     staffData.forEach((s, i) => {
-        if(s.name) {
-            const val = orderData['s'+i] || '';
-            html += `<td class="order-cell"><div contenteditable="true" class="editable-content" onblur="saveOrderData(${i}, this.innerText)">${val}</div></td>`;
-        }
+        if(s.name) html += `<td class="order-cell"><div contenteditable="true" class="editable-content" onblur="saveOrderData(${i}, this.innerText)">${orderData['s'+i] || ''}</div></td>`;
     });
     html += `<td class="order-cell"></td><td class="order-cell"></td>`; 
-    if (isStatsVisible) {
-        html += `<td colspan="3" class="order-cell" style="text-align:right; font-size:11px; padding-right:5px;">本月合計 →</td>
-                 <td class="sum-a">${totalA}</td><td class="sum-b">${totalB}</td>`;
-    }
+    if (isStatsVisible) html += `<td colspan="3" class="order-cell" style="text-align:right; font-size:11px; padding-right:5px;">本月合計 →</td><td class="sum-a">${totalA}</td><td class="sum-b">${totalB}</td>`;
     html += `</tr></tbody>`;
     document.getElementById('dutyTable').innerHTML = html;
 }
@@ -211,20 +190,14 @@ function clearMonthContent() {
     const pickerVal = document.getElementById('monthPicker').value;
     if(!pickerVal) return;
     const [year, month] = pickerVal.split('-');
-    if(!confirm(`⚠️ 警告：確定要清空 ${year}年${month}月 的所有勤務內容嗎？\n(V班、公假將被刪除，保留備註與順序)`)) return;
-    
+    if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的勤務嗎？\n(此動作將刪除所有 V班 與 公假)`)) return;
     db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
         const data = snap.val() || {};
         let updates = {};
         Object.keys(data).forEach(day => {
-            Object.keys(data[day]).forEach(key => {
-                if (key.startsWith('s')) updates[`${day}/${key}`] = "";
-            });
+            Object.keys(data[day]).forEach(key => { if (key.startsWith('s')) updates[`${day}/${key}`] = ""; });
         });
-        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => {
-            alert("本月勤務內容已清空！");
-            closeAllModals();
-        });
+        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => { alert("已清空內容！"); closeAllModals(); });
     });
 }
 
@@ -242,9 +215,7 @@ function saveRowData(day) {
     if(!row) return;
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     row.querySelectorAll('.editable-content').forEach((el, i) => {
-        if (!el.closest('td').classList.contains('order-cell')) {
-            rowObj['s'+i] = el.innerText;
-        }
+        if (!el.closest('td').classList.contains('order-cell')) rowObj['s'+i] = el.innerText;
     });
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
 }
@@ -257,32 +228,21 @@ function saveDayDeduct(day, val) {
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
     const [year, month] = picker.split('-');
-    if(!confirm(`執行帶入？`)) return;
+    if(!confirm(`將自動帶入全月勤休制度，是否繼續？`)) return;
     let updates = {};
     for (let d = 1; d <= new Date(year, month, 0).getDate(); d++) {
-        const currentDate = new Date(year, month - 1, d);
-        const dayIdx = currentDate.getDay(); 
+        const currentDate = new Date(year, month - 1, d), dayIdx = currentDate.getDay(); 
         let vCounter = 1; 
         staffData.forEach((s, i) => {
             if(s.name) {
-                let shouldOff = false;
-                if (s.isTraining && (dayIdx === 0 || dayIdx === 6)) {
-                    shouldOff = true;
-                } else if (s.startDate) {
-                    const start = new Date(s.startDate);
-                    const diffDays = Math.floor((currentDate - start) / 86400000);
-                    if (diffDays >= 0) {
-                        const cycle = diffDays % 4;
-                        if (cycle === 0 || cycle === 1) shouldOff = true;
-                    }
+                let off = false;
+                if (s.isTraining && (dayIdx === 0 || dayIdx === 6)) off = true;
+                else if (s.startDate) {
+                    const diff = Math.floor((currentDate - new Date(s.startDate)) / 86400000);
+                    if (diff >= 0 && (diff % 4 === 0 || diff % 4 === 1)) off = true;
                 }
-                if (shouldOff) {
-                    let vLabel = (vCounter <= 9) ? `V${vCounter}` : "休假";
-                    vCounter++;
-                    updates[`${d}/s${i}`] = (s.isTraining && dayIdx !== 0 && dayIdx !== 6) ? "公假A1" : vLabel;
-                } else {
-                    updates[`${d}/s${i}`] = (s.isTraining && dayIdx !== 0 && dayIdx !== 6) ? "公假A1" : "";
-                }
+                if (off) updates[`${d}/s${i}`] = (s.isTraining && dayIdx !== 0 && dayIdx !== 6) ? "公假A1" : `V${vCounter++}`;
+                else updates[`${d}/s${i}`] = (s.isTraining && dayIdx !== 0 && dayIdx !== 6) ? "公假A1" : "";
             }
         });
     }
@@ -312,17 +272,14 @@ function saveStaffData() {
             isTraining: document.getElementById(`train${i}`).checked
         });
     }
-    db.ref(`duty_system/global/staffData`).set(newData).then(() => { alert("儲存成功"); closeAllModals(); });
+    db.ref(`duty_system/global/staffData`).set(newData).then(() => { alert("設定已儲存！"); closeAllModals(); });
 }
 
 function exportToExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("dutyTable")), `四湖預定表.xlsx`); }
 
 (function(){
-    const now = new Date();
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const y = nextMonth.getFullYear();
-    const m = String(nextMonth.getMonth() + 1).padStart(2, '0');
-    document.getElementById('monthPicker').value = `${y}-${m}`;
+    const now = new Date(), next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    document.getElementById('monthPicker').value = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}`;
     initTable();
 })();
 </script>
