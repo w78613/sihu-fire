@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>四湖分隊雲端預定表 - 填假順序優化版</title>
+    <title>四湖分隊雲端預定表 - 下月預設版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -39,7 +39,6 @@
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
         .btn { padding: 8px 12px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
         
-        /* 計算欄位顏色 */
         .stat-header { background-color: #455a64 !important; color: white !important; }
         .stat-col { background-color: #ecf0f1; font-weight: bold; color: #2c3e50; }
         .stat-deduct { background-color: #dfe6e9; }
@@ -47,7 +46,6 @@
         .stat-a { background-color: var(--stat-blue) !important; color: white !important; font-weight: bold; }
         .stat-b { background-color: var(--stat-orange) !important; color: white !important; font-weight: bold; }
         
-        /* 填假順序優化顏色 */
         .order-title { background-color: #34495e !important; color: white !important; font-weight: bold; }
         .order-cell { background-color: #f1f4f7 !important; font-weight: bold; }
         .sum-a { background-color: #2980b9 !important; color: white !important; font-size: 15px; font-weight: bold; }
@@ -179,7 +177,6 @@ function renderTable(year, month, data) {
         html += `</tr>`;
     }
 
-    // 填假順序列 (移除月總計符號並優化顏色)
     html += `<tr>
         <td class="col-date-fixed order-title" colspan="2">填假順序</td>`;
     staffData.forEach((s, i) => {
@@ -189,7 +186,6 @@ function renderTable(year, month, data) {
         }
     });
     
-    // 補齊備註與可填欄位 (設為空白)
     html += `<td class="order-cell"></td><td class="order-cell"></td>`; 
     
     if (isStatsVisible) {
@@ -306,9 +302,18 @@ function saveStaffData() {
 
 function exportToExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("dutyTable")), `四湖預定表.xlsx`); }
 
+// ==========================================
+// 修改後的初始化邏輯：預設開啟下個月
+// ==========================================
 (function(){
     const now = new Date();
-    document.getElementById('monthPicker').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    // 設定到下個月：如果現在 1 月，則為 2 月；如果現在 12 月，則為明年 1 月
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    
+    const y = nextMonth.getFullYear();
+    const m = String(nextMonth.getMonth() + 1).padStart(2, '0');
+    
+    document.getElementById('monthPicker').value = `${y}-${m}`;
     initTable();
 })();
 </script>
