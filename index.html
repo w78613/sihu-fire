@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <title>四湖分隊雲端預定表 - 完整功能版</title>
+    <title>四湖分隊雲端預定表 - 功能全修復版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -38,7 +38,7 @@
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; background: white; border-right: 2px solid #333 !important; width: 45px; }
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
         
-        /* 顏色美化 */
+        /* 狀態顏色 */
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
         .status-vacation { background-color: #ffe0b2 !important; color: #e65100; font-weight: bold; }
         .status-exchange { background-color: #e3f2fd !important; color: #0d47a1; font-weight: bold; }
@@ -61,8 +61,9 @@
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
+        .danger-zone { margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ddd; }
 
-        #quickMenu { position: fixed; bottom: 0; left: 0; width: 100%; background: #2c3e50; display: none; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px; box-sizing: border-box; z-index: 2001; box-shadow: 0 -2px 10px rgba(0,0,0,0.3); }
+        #quickMenu { position: fixed; bottom: 0; left: 0; width: 100%; background: #2c3e50; display: none; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px; box-sizing: border-box; z-index: 2001; }
         .quick-btn { padding: 15px 5px; border-radius: 6px; border: none; font-weight: bold; color: white; font-size: 15px; cursor: pointer; text-align: center; }
     </style>
 </head>
@@ -91,9 +92,15 @@
 <div id="staffModal">
     <h3>👥 名單與起始日設定</h3>
     <div id="staffInputs" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;"></div>
+    
     <div style="display: flex; gap: 10px; margin-top: 20px;">
-        <button class="btn" style="background: #0984e3; flex: 2;" onclick="saveStaffData()">✅ 儲存</button>
+        <button class="btn" style="background: #0984e3; flex: 2;" onclick="saveStaffData()">✅ 儲存設定</button>
         <button class="btn" style="background: #636e72; flex: 1;" onclick="closeAllModals()">關閉</button>
+    </div>
+
+    <div class="danger-zone">
+        <p style="color: #d63031; font-size: 12px; margin-bottom: 5px;">⚠️ 危險區域：保留備註與順序，清空本月勤務內容。</p>
+        <button class="btn" style="background: #d63031; width: 100%;" onclick="clearMonthContent()">🗑️ 一鍵清空本月勤務內容</button>
     </div>
 </div>
 
@@ -101,22 +108,19 @@
 let staffData = []; 
 let isStatsVisible = false;
 let currentActiveCell = null;
-let lastCellValue = ""; // 暫存舊值用於回退
+let lastCellValue = "";
 
 function toggleStatsVisibility() { isStatsVisible = !isStatsVisible; initTable(); }
 function closeAllModals() { document.getElementById('staffModal').style.display = 'none'; document.getElementById('modalOverlay').style.display = 'none'; document.getElementById('quickMenu').style.display = 'none'; }
 
-// 聚焦時觸發
 function handleCellFocus(el) {
     currentActiveCell = el;
     lastCellValue = el.innerText;
-    // 只有勤務欄位顯示快捷選單 (排除備註與順序)
     if (el.classList.contains('duty-cell')) {
         document.getElementById('quickMenu').style.display = 'grid';
     }
 }
 
-// 快捷選單輸入
 function setQuickVal(val) {
     if(currentActiveCell) {
         currentActiveCell.innerText = val;
@@ -195,7 +199,6 @@ function renderTable(year, month, data) {
         html += `</tr>`;
     }
 
-    // --- 恢復：填假順序列 ---
     html += `<tr><td class="col-date-fixed order-title" colspan="2">填假順序</td>`;
     staffData.forEach((s, i) => {
         if(s.name) {
@@ -204,55 +207,53 @@ function renderTable(year, month, data) {
         }
     });
     html += `<td class="order-cell"></td><td class="order-cell"></td>`; 
-    if (isStatsVisible) {
-        html += `<td colspan="3" class="order-cell" style="text-align:right; font-size:11px; padding-right:5px;">本月合計 →</td><td class="sum-a">${totalA}</td><td class="sum-b">${totalB}</td>`;
-    }
+    if (isStatsVisible) html += `<td colspan="3" class="order-cell" style="text-align:right; font-size:11px; padding-right:5px;">本月合計 →</td><td class="sum-a">${totalA}</td><td class="sum-b">${totalB}</td>`;
     html += `</tr></tbody></table>`;
     document.getElementById('dutyTable').innerHTML = html;
 }
 
-// 核心功能：檢查並存檔
 function saveRowData(day, cellEl) {
     const [y, m] = document.getElementById('monthPicker').value.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
     if(!row || !cellEl) return;
-
-    // 備註欄位不檢查人數，直接存檔
     if(cellEl.classList.contains('note-cell')) {
         db.ref(`duty_system/${y}_${m}/content/${day}`).update({ note: cellEl.innerText });
         return;
     }
-
-    // 取得該行所有勤務格子的內容
     const cells = row.querySelectorAll('.duty-cell');
     let emptyCount = 0;
-    cells.forEach((el, i) => {
-        if (staffData[i] && staffData[i].name && el.innerText.trim() === "") emptyCount++;
-    });
-
+    cells.forEach((el, i) => { if (staffData[i] && staffData[i].name && el.innerText.trim() === "") emptyCount++; });
     const deductInput = row.querySelector('.stat-deduct input');
     const deduct = deductInput ? parseInt(deductInput.value || 0) : 0;
     const realSlots = emptyCount - deduct;
-
-    // 安全回退機制：人數不足 5 人
     if (realSlots < 5) {
-        alert(`⚠️ 無法修改！\n${m}/${day} 在位人數不足 5 人。\n內容將恢復為：${lastCellValue || '(空白)'}`);
+        alert(`⚠️ 人數不足！恢復為：${lastCellValue || '(空白)'}`);
         cellEl.innerText = lastCellValue; 
         return; 
     }
-
-    // 成功後存檔到 Firebase
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     cells.forEach((el, i) => { if(staffData[i]) rowObj['s'+i] = el.innerText; });
     db.ref(`duty_system/${y}_${m}/content/${day}`).update(rowObj);
 }
 
-function saveOrderData(idx, val) { 
-    const [y, m] = document.getElementById('monthPicker').value.split('-'); 
-    db.ref(`duty_system/${y}_${m}/order`).update({ ['s'+idx]: val }); 
-}
-
+function saveOrderData(idx, val) { const [y, m] = document.getElementById('monthPicker').value.split('-'); db.ref(`duty_system/${y}_${m}/order`).update({ ['s'+idx]: val }); }
 function saveDayDeduct(d, v) { const [y, m] = document.getElementById('monthPicker').value.split('-'); db.ref(`duty_system/${y}_${m}/settings/dayDeducts`).update({ [d]: v }); }
+
+// 一鍵刪除核心函數 (已恢復)
+function clearMonthContent() {
+    const pickerVal = document.getElementById('monthPicker').value;
+    if(!pickerVal) return;
+    const [year, month] = pickerVal.split('-');
+    if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的所有勤務內容嗎？\n(備註與順序會保留)`)) return;
+    db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
+        const data = snap.val() || {};
+        let updates = {};
+        Object.keys(data).forEach(day => {
+            Object.keys(data[day]).forEach(key => { if (key.startsWith('s')) updates[`${day}/${key}`] = ""; });
+        });
+        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => { alert("已成功清空！"); closeAllModals(); });
+    });
+}
 
 function applyDutyCycle() {
     const [y, m] = document.getElementById('monthPicker').value.split('-');
