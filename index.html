@@ -15,7 +15,7 @@
             authDomain: "sihu-fire-duty.firebaseapp.com",
             databaseURL: "https://sihu-fire-duty-default-rtdb.asia-southeast1.firebasedatabase.app",
             projectId: "sihu-fire-duty",
-            storageBucket: "sihu-fire-duty.firebasestorage.app",
+            storageBucket: "sihu-fire-duty.firebasedatorage.app",
             messagingSenderId: "196116965207",
             appId: "1:196116965207:web:9ca18084c3b69f0c550012",
             measurementId: "G-51TZMYZ840"
@@ -52,6 +52,8 @@
         .sum-b { background-color: #d35400 !important; color: white !important; font-size: 15px; font-weight: bold; }
         
         .warning-text { color: red; font-size: 11px; font-weight: bold; }
+        .row-alert { background-color: #ffebee !important; } /* 警告時背景變淡紅 */
+        
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1999; }
         #staffModal { display: none; position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 95%; max-width: 850px; background: white; border: 2px solid #333; padding: 20px; z-index: 2000; border-radius: 10px; max-height: 85vh; overflow-y: auto; }
         .staff-input-group { border: 1px solid #ddd; padding: 8px; border-radius: 5px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
@@ -146,9 +148,13 @@ function renderTable(year, month, data) {
         const deduct = parseInt(deductValues[d] || 0);
         const realSlots = emptyTotal - deduct;
         let canLeaveText = (realSlots >= 7) ? "2" : (realSlots === 6 ? "1" : (realSlots === 5 ? "0" : "X"));
-        if (realSlots < 5) canLeaveText = `<span class="warning-text">下限</span>`;
+        let rowAlertClass = "";
+        if (realSlots < 5) {
+            canLeaveText = `<span class="warning-text">下限</span>`;
+            rowAlertClass = "row-alert";
+        }
 
-        html += `<tr data-day="${d}">
+        html += `<tr data-day="${d}" class="${rowAlertClass}">
             <td class="col-date-fixed" style="color:${dayIdx===0?'red':(dayIdx===6?'#e67e22':'#333')}">${d}</td>
             <td class="col-week-fixed" style="color:${dayIdx===0?'red':(dayIdx===6?'#e67e22':'#333')}">${["日","一","二","三","四","五","六"][dayIdx]}</td>`;
         
@@ -160,7 +166,7 @@ function renderTable(year, month, data) {
             }
         });
 
-        html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td><td>${canLeaveText}</td>`;
+        html += `<td contenteditable="true" onblur="saveRowData(${d})" class="note-cell">${rowData.note || ''}</td><td class="can-leave-cell">${canLeaveText}</td>`;
         
         if (isStatsVisible) {
             let showA = (realSlots >= 6 && emptyA > emptyB) ? (realSlots >= 7 ? 2 : 1) : 0;
@@ -223,7 +229,10 @@ function clearMonthContent() {
     });
 }
 
-function handleManualInput(cell) { saveRowData(cell.closest('tr').dataset.day); }
+function handleManualInput(cell) { 
+    const day = cell.closest('tr').dataset.day;
+    saveRowData(day); 
+}
 
 function applyDutyCycle() {
     const picker = document.getElementById('monthPicker').value;
@@ -257,13 +266,44 @@ function applyDutyCycle() {
             }
         });
     }
-    db.ref(`duty_system/${year}_${month}/content`).update(updates);
+    db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => {
+        // 自動帶入後檢查是否有任何一天的員額不足
+        setTimeout(() => {
+            const warningRows = document.querySelectorAll('.row-alert');
+            if(warningRows.length > 0) {
+                const days = Array.from(warningRows).map(r => r.dataset.day).join(', ');
+                alert(`⚠️ 警告：本月第 ${days} 日在位人數不足，無法填假！`);
+            }
+        }, 500);
+    });
 }
 
 function saveRowData(day) {
-    const [year, month] = document.getElementById('monthPicker').value.split('-');
+    const pickerVal = document.getElementById('monthPicker').value;
+    if(!pickerVal) return;
+    const [year, month] = pickerVal.split('-');
     const row = document.querySelector(`tr[data-day="${day}"]`);
     if(!row) return;
+
+    // --- 即時檢查員額 ---
+    const contents = row.querySelectorAll('.editable-content');
+    let emptyCount = 0;
+    contents.forEach((el, i) => {
+        if(staffData[i] && staffData[i].name && el.innerText.trim() === "") {
+            emptyCount++;
+        }
+    });
+    
+    // 獲取預扣值 (從畫面上抓取，若計算欄位沒開則預設為 0)
+    const deductInput = row.querySelector('.stat-deduct input');
+    const deduct = deductInput ? parseInt(deductInput.value || 0) : 0;
+    const realSlots = emptyCount - deduct;
+
+    if (realSlots < 5) {
+        alert(`⚠️ 無法填假！\n${month}/${day} 在位人數僅剩 ${realSlots} 人，已達下限。`);
+    }
+    // ------------------
+
     const rowObj = { note: row.querySelector('.note-cell').innerText };
     row.querySelectorAll('.editable-content').forEach((el, i) => rowObj['s'+i] = el.innerText);
     db.ref(`duty_system/${year}_${month}/content/${day}`).update(rowObj);
@@ -302,17 +342,11 @@ function saveStaffData() {
 
 function exportToExcel() { XLSX.writeFile(XLSX.utils.table_to_book(document.getElementById("dutyTable")), `四湖預定表.xlsx`); }
 
-// ==========================================
-// 修改後的初始化邏輯：預設開啟下個月
-// ==========================================
 (function(){
     const now = new Date();
-    // 設定到下個月：如果現在 1 月，則為 2 月；如果現在 12 月，則為明年 1 月
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    
     const y = nextMonth.getFullYear();
     const m = String(nextMonth.getMonth() + 1).padStart(2, '0');
-    
     document.getElementById('monthPicker').value = `${y}-${m}`;
     initTable();
 })();
