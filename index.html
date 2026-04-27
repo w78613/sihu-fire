@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <title>四湖分隊雲端預定表 - 功能全修復版</title>
+    <title>四湖分隊雲端預定表 - 安全加強版</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.16.0/firebase-database-compat.js"></script>
@@ -17,7 +17,7 @@
             authDomain: "sihu-fire-duty.firebaseapp.com",
             databaseURL: "https://sihu-fire-duty-default-rtdb.asia-southeast1.firebasedatabase.app",
             projectId: "sihu-fire-duty",
-            storageBucket: "sihu-fire-duty.firebasestorage.app",
+            storageBucket: "sihu-fire-duty.firebasedatorage.app",
             messagingSenderId: "196116965207",
             appId: "1:196116965207:web:9ca18084c3b69f0c550012",
             measurementId: "G-51TZMYZ840"
@@ -38,7 +38,6 @@
         .col-week-fixed { position: sticky; left: 45px; z-index: 91; background: white; border-right: 2px solid #333 !important; width: 45px; }
         .editable-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; outline: none; min-height: 38px; cursor: text; }
         
-        /* 狀態顏色 */
         .status-a1 { background-color: #fff176 !important; font-weight: bold; }
         .status-vacation { background-color: #ffe0b2 !important; color: #e65100; font-weight: bold; }
         .status-exchange { background-color: #e3f2fd !important; color: #0d47a1; font-weight: bold; }
@@ -239,19 +238,30 @@ function saveRowData(day, cellEl) {
 function saveOrderData(idx, val) { const [y, m] = document.getElementById('monthPicker').value.split('-'); db.ref(`duty_system/${y}_${m}/order`).update({ ['s'+idx]: val }); }
 function saveDayDeduct(d, v) { const [y, m] = document.getElementById('monthPicker').value.split('-'); db.ref(`duty_system/${y}_${m}/settings/dayDeducts`).update({ [d]: v }); }
 
-// 一鍵刪除核心函數 (已恢復)
+// 一鍵刪除核心函數 - 增加密碼保護
 function clearMonthContent() {
     const pickerVal = document.getElementById('monthPicker').value;
     if(!pickerVal) return;
     const [year, month] = pickerVal.split('-');
+    
+    const SECRET_PASSWORD = "1234"; // 你可以在這裡修改密碼
+
     if(!confirm(`⚠️ 確定要清空 ${year}年${month}月 的所有勤務內容嗎？\n(備註與順序會保留)`)) return;
+
+    const userInput = prompt("🔒 請輸入管理員密碼以確認清空：");
+    if (userInput === null) return;
+    if (userInput !== SECRET_PASSWORD) {
+        alert("❌ 密碼錯誤，操作取消。");
+        return;
+    }
+
     db.ref(`duty_system/${year}_${month}/content`).once('value', (snap) => {
         const data = snap.val() || {};
         let updates = {};
         Object.keys(data).forEach(day => {
             Object.keys(data[day]).forEach(key => { if (key.startsWith('s')) updates[`${day}/${key}`] = ""; });
         });
-        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => { alert("已成功清空！"); closeAllModals(); });
+        db.ref(`duty_system/${year}_${month}/content`).update(updates).then(() => { alert("✅ 已成功清空！"); closeAllModals(); });
     });
 }
 
